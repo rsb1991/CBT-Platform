@@ -6,8 +6,8 @@ import QuestionRenderer from "./QuestionRenderer";
 // 
 // SUPABASE CONFIG  replace with your project URL & anon key
 // 
-const SUPABASE_URL = "https://jozyhpdcfqxmohuhtsfn.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvenlocGRjZnF4bW9odWh0c2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0MzU3MDUsImV4cCI6MjA5NTAxMTcwNX0.svc7HkXB3I_xcXQgifhFhVe2Y5jIqKGb8RLbhd5KGzA";
+const SUPABASE_URL = "https://wsfbzwgdfxxhedccodua.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzZmJ6d2dkZnh4aGVkY2NvZHVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MTM0NzksImV4cCI6MjA5NTM4OTQ3OX0.I6RVwV8PXB-3NFWAQxK-KuvBbSnlI7ilKKVRpciJkt0";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // 
