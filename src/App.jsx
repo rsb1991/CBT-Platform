@@ -2397,8 +2397,6 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
             );
           })}
         </div>
-
-          </div>
         )}
 
         {/* BOOKMARKS TAB */}
