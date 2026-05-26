@@ -2331,68 +2331,149 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
         )}
 
         {/* SOLUTIONS TAB */}
-        {activeTab === "solutions" && (
-          <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-              <h3 style={{ color: "#a5b4fc", margin: 0, fontSize: "1rem" }}>Solutions & Review ({filtered.length})</h3>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["All","Correct","Wrong","Unattempted","Bookmarked"].map(s => (
-                  <button key={s} onClick={() => setFilterStatus(s)} style={btn(filterStatus===s?"primary":"ghost", { padding: "5px 12px", fontSize: 12 })}>{s}</button>
-                ))}
+{activeTab === "solutions" && (
+  <div>
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 14,
+        flexWrap: "wrap",
+        gap: 10
+      }}
+    >
+      <h3
+        style={{
+          color: "#a5b4fc",
+          margin: 0,
+          fontSize: "1rem"
+        }}
+      >
+        Solutions & Review ({filtered.length})
+      </h3>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {["All","Correct","Wrong","Unattempted","Bookmarked"].map(s => (
+          <button
+            key={s}
+            onClick={() => setFilterStatus(s)}
+            style={btn(
+              filterStatus === s ? "primary" : "ghost",
+              { padding: "5px 12px", fontSize: 12 }
+            )}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: "flex",
+        gap: 6,
+        marginBottom: 16,
+        flexWrap: "wrap"
+      }}
+    >
+      {["All", ...SUBJECTS].map(s => (
+        <button
+          key={s}
+          onClick={() => setFilterSub(s)}
+          style={{
+            ...btn(
+              filterSub === s
+                ? "primary"
+                : "ghost",
+              {
+                padding: "5px 13px",
+                fontSize: 12
+              }
+            )
+          }}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 10
+      }}
+    >
+      {filtered.map(q => {
+        const userAns = answers[q.id];
+        const isCorrect = userAns === q.correct;
+        const isWrong =
+          userAns !== undefined &&
+          !isCorrect;
+
+        const isOpen =
+          expandId === q.id;
+
+        return (
+          <div
+            key={q.id}
+            style={{
+              ...card(),
+              border: `1px solid ${
+                isCorrect
+                  ? "rgba(34,197,94,0.3)"
+                  : isWrong
+                  ? "rgba(239,68,68,0.25)"
+                  : "rgba(255,255,255,0.07)"
+              }`,
+              overflow: "hidden"
+            }}
+          >
+            <div
+              onClick={() =>
+                setExpandId(
+                  isOpen
+                    ? null
+                    : q.id
+                )
+              }
+              style={{
+                display: "flex",
+                gap: 13,
+                padding: "14px 18px",
+                cursor: "pointer"
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                {q.subject} Q{q.number}
               </div>
             </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-          {["All", ...SUBJECTS].map(s => (
-            <button key={s} onClick={() => setFilterSub(s)} style={{
-              ...btn(filterSub === s ? "primary" : "ghost", { padding: "5px 13px", fontSize: 12 })
-            }}>{s}</button>
-          ))}
-        </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {filtered.map(q => {
-            const userAns = answers[q.id];
-            const isCorrect = userAns === q.correct;
-            const isWrong = userAns !== undefined && !isCorrect;
-            const isOpen = expandId === q.id;
-            return (
-              <div key={q.id} style={{ ...card(), border: `1px solid ${isCorrect ? "rgba(34,197,94,0.3)" : isWrong ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.07)"}`, overflow: "hidden" }}>
-                <div onClick={() => setExpandId(isOpen ? null : q.id)} style={{ display: "flex", alignItems: "flex-start", gap: 13, padding: "14px 18px", cursor: "pointer" }}>
-                  <div style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, background: isCorrect ? "rgba(34,197,94,0.2)" : isWrong ? "rgba(239,68,68,0.2)" : "rgba(100,116,139,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
-                    {isCorrect ? "" : isWrong ? "" : ""}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: 3 }}>
-                      {q.subject}  Q{q.number}
-                      {userAns !== undefined && <span style={{ marginLeft: 10, color: isCorrect ? "#4ade80" : "#f87171", fontWeight: 600 }}>{isCorrect ? "+4" : "1"}</span>}
-                    </div>
-                    <div style={{ fontSize: "0.92rem", lineHeight: 1.65, color: "#cbd5e1" }}>
-                      {/* Show plain text preview in collapsed card; full render on expand */}
-                      {(q.question_text || q.text || "").slice(0, 120)}{(q.question_text || q.text || "").length > 120 ? "" : ""}
-                      {q.equation && q.equation.trim() && (
-                        <span style={{ color: "#818cf8", fontSize: 11, marginLeft: 6 }}>eq</span>
-                      )}
-                      {q.diagram_url && q.diagram_url.trim() && (
-                        <span style={{ color: "#22c55e", fontSize: 11, marginLeft: 4 }}>diagram</span>
-                      )}
-                    </div>
-                  </div>
-                  <span style={{ color: "#374151", flexShrink: 0, fontSize: 12 }}>{isOpen ? "" : ""}</span>
-                </div>
-                {isOpen && (
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 18px 18px 57px" }}>
-                    <QuestionRenderer
-                      q={q}
-                      showSolution={true}
-                      userAnswer={userAns}
-                    />
-                  </div>
-                )}
+            {isOpen && (
+              <div
+                style={{
+                  borderTop:
+                    "1px solid rgba(255,255,255,0.06)",
+                  padding:
+                    "14px 18px 18px 57px"
+                }}
+              >
+                <QuestionRenderer
+                  q={q}
+                  showSolution={true}
+                  userAnswer={userAns}
+                />
               </div>
-            );
-          })}
-        </div>
-        )}
+            )}
+          </div>
+        );
+      })}
+    </div>
+
+  </div>
+)}
         {/* BOOKMARKS TAB */}
         {activeTab === "bookmarks" && (
           <div>
