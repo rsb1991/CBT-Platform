@@ -830,21 +830,21 @@ function AdminScreen({ onSignOut }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "Georgia, serif", color: "#e2e8f0" }}>
-      {/* Top bar */}
+      
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(168,85,247,0.2)", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ color: "#c084fc", fontWeight: 700, fontSize: "1rem" }}>CBT Admin Panel</span>
         <button onClick={onSignOut} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>Sign Out</button>
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
-        {/* Tab bar */}
+        
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions"],["settings","Exam Settings"],["students","Student Data"]].map(([t,l]) => (
             <button key={t} onClick={() => setTab(t)} style={abtn(tab===t?"primary":"ghost")}>{l + (t==="list" ? " (" + questions.length + ")" : "")}</button>
           ))}
         </div>
 
-        {/*  ADD TAB  */}
+        
         {tab === "add" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {msg && <div style={mstyle(msg)}>{msg.text}</div>}
@@ -928,12 +928,12 @@ function AdminScreen({ onSignOut }) {
           </div>
         )}
 
-        {/*  CSV UPLOAD TAB  */}
+       
         {tab === "csv" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {csvMsg && <div style={mstyle(csvMsg)}>{csvMsg.text}</div>}
 
-            {/* Format guide */}
+            
             <div style={{ ...acard, padding: "18px 20px" }}>
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12, fontSize: "0.95rem" }}>CSV Format Guide</div>
               <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 10px" }}>Your CSV file must have a header row with these exact column names:</p>
@@ -959,7 +959,7 @@ function AdminScreen({ onSignOut }) {
                 ))}
               </div>
 
-              {/* Sample CSV download */}
+              
               <button
                 onClick={() => {
                   const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
@@ -978,7 +978,7 @@ function AdminScreen({ onSignOut }) {
               </button>
             </div>
 
-            {/* Upload area */}
+            
             <div
               onClick={() => { const inp = document.createElement("input"); inp.type="file"; inp.accept=".csv"; inp.onchange=e=>handleCSVFile(e.target.files[0]); inp.click(); }}
               onDragOver={e => e.preventDefault()}
@@ -990,7 +990,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ color: "#475569", fontSize: 13 }}>Max 500 questions per upload</div>
             </div>
 
-            {/* Preview */}
+           
             {csvPreview.length > 0 && (
               <div style={{ ...acard }}>
                 <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 10, fontSize: "0.9rem" }}>Preview (first 5 rows)</div>
@@ -1013,7 +1013,7 @@ function AdminScreen({ onSignOut }) {
               </div>
             )}
 
-            {/* Upload buttons */}
+           
             {csvFileRef._parsed && csvFileRef._parsed.length > 0 && (
               <div style={{ display: "flex", gap: 12 }}>
                 <button onClick={() => handleCSVUpload(false)} disabled={csvLoading}
@@ -1029,7 +1029,7 @@ function AdminScreen({ onSignOut }) {
           </div>
         )}
 
-        {/*  ALL QUESTIONS TAB  */}
+        
         {tab === "list" && (
           <div>
             {msg && <div style={mstyle(msg)}>{msg.text}</div>}
@@ -1095,12 +1095,12 @@ function AdminScreen({ onSignOut }) {
           </div>
         )}
 
-        {/*  SETTINGS TAB  */}
+       
         {tab === "settings" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {settingsMsg && <div style={mstyle(settingsMsg)}>{settingsMsg.text}</div>}
 
-            {/* Exam Access */}
+            
             <div style={{ ...acard, padding: "20px 22px" }}>
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 16, fontSize: "0.95rem" }}>Exam Access</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1136,7 +1136,7 @@ function AdminScreen({ onSignOut }) {
               </div>
             </div>
 
-            {/* Exam Window */}
+            
             <div style={{ ...acard, padding: "20px 22px" }}>
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 16, fontSize: "0.95rem" }}>Exam Time Window</div>
               <div style={{ color: "#64748b", fontSize: 12, marginBottom: 12 }}>Leave blank to allow access at any time</div>
@@ -1152,7 +1152,7 @@ function AdminScreen({ onSignOut }) {
               </div>
             </div>
 
-            {/* Attempt limit + NEET date */}
+            
             <div style={{ ...acard, padding: "20px 22px" }}>
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 16, fontSize: "0.95rem" }}>Exam Rules</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1168,7 +1168,7 @@ function AdminScreen({ onSignOut }) {
               </div>
             </div>
 
-            {/* Webcam + features */}
+            
             <div style={{ ...acard, padding: "20px 22px" }}>
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 16, fontSize: "0.95rem" }}>Features</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1191,7 +1191,7 @@ function AdminScreen({ onSignOut }) {
               </div>
             </div>
 
-            {/* Paper ID */}
+            
             <div style={{ ...acard, padding: "20px 22px" }}>
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12, fontSize: "0.95rem" }}>Paper Settings</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1217,7 +1217,7 @@ function AdminScreen({ onSignOut }) {
           </div>
         )}
 
-        {/*  STUDENT DATA TAB  */}
+        
         {tab === "students" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -1230,7 +1230,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No exam attempts yet.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* Summary stats */}
+                
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 8 }}>
                   {[
                     ["Total Attempts", students.length],
@@ -1305,7 +1305,7 @@ function AuthScreen({ onAuth }) {
       fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem"
     }}>
       <div style={{ width: "100%", maxWidth: 440 }}>
-        {/* Logo */}
+        
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: "#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16, fontFamily: "monospace" }}>
             NTA  NEET UG 2025
@@ -1321,7 +1321,7 @@ function AuthScreen({ onAuth }) {
             <div style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", padding: "10px 14px", fontSize: 13, color: "#fbbf24" }}>
                <strong>Demo Mode</strong>  Supabase credentials not set. Enter any email to continue.
             </div>
-            {/* Show config diagnosis */}
+            
             {(() => {
               const diag = diagnoseConfig();
               return diag ? (
@@ -1334,7 +1334,7 @@ function AuthScreen({ onAuth }) {
         )}
 
         <div style={{ ...card(), padding: 28 }}>
-          {/* Tab switcher */}
+         
           <div style={{ display: "flex", background: "rgba(0,0,0,0.3)", borderRadius: 10, padding: 4, marginBottom: 24 }}>
             {["login","signup"].map(m => (
               <button key={m} onClick={() => { setMode(m); setErr(""); }} style={{
@@ -1369,7 +1369,7 @@ function AuthScreen({ onAuth }) {
           </div>
         </div>
 
-        {/* Supabase setup info */}
+        
         {!configured && (
           <div style={{ marginTop: 20, ...card(), padding: "16px 18px", fontSize: 12, color: "#64748b", lineHeight: 1.7 }}>
             <strong style={{ color: "#818cf8" }}>To enable full backend:</strong>
@@ -1466,24 +1466,24 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
         @font-face { font-family: 'Kruti Dev 010'; src: local('Kruti Dev 010'); }
       `}</style>
-      {/* Top nav */}
+     
       <div style={{ background: darkMode ? "#0f172a" : "#fff", borderBottom: "1px solid " + (darkMode ? "rgba(255,255,255,0.08)" : "#e2e8f0"), padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <span style={{ color: "#818cf8", fontWeight: 700, fontSize: "1.1rem" }}>NEET UG</span>
           <span style={{ color: "#475569", fontSize: 13, marginLeft: 10 }}>Mock Test Platform</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {/* Countdown */}
+         
           {daysLeft > 0 && (
             <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "5px 12px", fontSize: 12, color: "#f87171" }}>
               {daysLeft} days to NEET
             </div>
           )}
-          {/* Dark/light toggle */}
+          
           <button onClick={() => setDarkMode(!darkMode)} style={{ ...btn("ghost", { padding: "6px 12px", fontSize: 12 }) }}>
             {darkMode ? "Light Mode" : "Dark Mode"}
           </button>
-          {/* Hindi font toggle */}
+          
           <button onClick={() => setHindiMode(!hindiMode)} style={{ ...btn("ghost", { padding: "6px 12px", fontSize: 12 }) }}>
             {hindiMode ? "English Font" : "Hindi Font"}
           </button>
@@ -1496,7 +1496,7 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
-        {/* Stats row */}
+       
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 32 }}>
           {[
             { label: "Tests Taken", value: history.length, color: "#818cf8" },
@@ -1510,7 +1510,7 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
           ))}
         </div>
 
-        {/* Tabs */}
+        
         <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
           <button onClick={() => setTab("start")}       style={btn(tab==="start"?"primary":"ghost",{padding:"8px 18px",fontSize:13})}>Start Test</button>
           <button onClick={() => setTab("history")}     style={btn(tab==="history"?"primary":"ghost",{padding:"8px 18px",fontSize:13})}>Score History</button>
@@ -1519,13 +1519,13 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
           )}
         </div>
 
-        {/* START TEST TAB */}
+       
         {tab === "start" && (
           <div style={{ ...card(), padding: 28 }}>
             <h2 style={{ color: "#e2e8f0", margin: "0 0 6px", fontSize: "1.2rem", fontWeight: 700 }}>NEET UG 2025 - Mock Test</h2>
             <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: 14 }}>Full-length mock examination</p>
 
-            {/* Attempt limit warning */}
+            
             {limitReached && (
               <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, color: "#f87171", fontSize: 14 }}>
                 You have used all {attemptLimit} allowed attempts for this exam.
@@ -1546,7 +1546,7 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
               ))}
             </div>
 
-            {/* Access code */}
+            
             {settings?.access_code_enabled === "true" && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ color: "#94a3b8", fontSize: 12, display: "block", marginBottom: 6 }}>Exam Access Code</label>
@@ -1571,7 +1571,7 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
           </div>
         )}
 
-        {/* HISTORY TAB */}
+        
         {tab === "history" && (
           <div>
             {loadingHistory ? (
@@ -1610,7 +1610,7 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
           </div>
         )}
 
-        {/* LEADERBOARD TAB */}
+       
         {tab === "leaderboard" && (
           <div>
             <h3 style={{ color: "#a5b4fc", marginBottom: 14, fontSize: "1rem" }}>Top Scores - NEET 2025</h3>
@@ -1723,7 +1723,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
 
   return (
     <div style={{ width: 230, background: "#0a1124", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
-      {/* Mini counts */}
+      
       <div style={{ padding: "10px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
         {[["#22c55e", counts.a, "Ans"],["#a855f7", counts.m, "Marked"],["#ef4444", counts.n, "NA"],["#374151", counts.v, "NV"]].map(([c,n,l]) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.03)", borderRadius: 7, padding: "5px 7px" }}>
@@ -1733,7 +1733,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
           </div>
         ))}
       </div>
-      {/* Subject tabs */}
+      
       <div style={{ padding: "7px 8px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         {SUBJECTS.map(s => (
           <button key={s} onClick={() => setActiveSub(s)} style={{
@@ -1745,7 +1745,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
           }}>{s}</button>
         ))}
       </div>
-      {/* Grid */}
+      
       <div style={{ flex: 1, overflowY: "auto", padding: "10px 8px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5 }}>
           {filtered.map(q => {
@@ -1960,13 +1960,13 @@ function ExamScreen({ questions, year, onFinish, settings }) {
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
-      {/* Header */}
+      
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 12 }}>
         <div>
           <span style={{ color: "#818cf8", fontWeight: 700, fontSize: "1rem" }}>NEET {year}</span>
           <span style={{ color: "#475569", fontSize: 12, marginLeft: 10 }}>Mock Examination</span>
         </div>
-        {/* Subject tabs */}
+       
         <div style={{ display: "flex", gap: 6 }}>
           {SUBJECTS.map((s, i) => {
             const sqCount = questions.filter(x => x.subject === s && answers[x.id] !== undefined).length;
@@ -1993,7 +1993,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
         </div>
       </div>
 
-      {/* Session restored banner */}
+      
       {restored && (
         <div style={{
           background: "rgba(34,197,94,0.12)", borderBottom: "1px solid rgba(34,197,94,0.25)",
@@ -2005,10 +2005,10 @@ function ExamScreen({ questions, year, onFinish, settings }) {
         </div>
       )}
 
-      {/* Body */}
+     
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
-          {/* Meta */}
+         
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
             <span style={{ background: `rgba(${subjectColors[subjectIdx]},0.15)`, border: `1px solid ${subjectColors[subjectIdx]}44`, borderRadius: 7, padding: "3px 12px", color: subjectColors[subjectIdx], fontSize: 13, fontWeight: 600 }}>
               {q.subject}
@@ -2018,7 +2018,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
             {marked.has(q.id) && <span style={{ background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 7, padding: "3px 10px", color: "#a855f7", fontSize: 12 }}> Marked</span>}
           </div>
 
-          {/* Question + options  fully handled by QuestionRenderer */}
+         
           <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 13, padding: "22px 26px", marginBottom: 4 }}>
             <div style={{ color: "#64748b", fontWeight: 700, marginBottom: 12, fontFamily: "monospace", fontSize: 13 }}>
               Q{q.number}.
@@ -2031,7 +2031,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
             />
           </div>
 
-          {/* Actions */}
+          
           <div style={{ display: "flex", gap: 10, marginTop: 28, flexWrap: "wrap", alignItems: "center" }}>
             <button onClick={toggleMark} style={btn("mark")}> {marked.has(q.id) ? "Unmark" : "Mark"} & Next</button>
             <button onClick={toggleBookmark} style={{ ...btn("ghost"), borderColor: bookmarks.has(q.id) ? "rgba(245,158,11,0.5)" : undefined, color: bookmarks.has(q.id) ? "#fbbf24" : undefined }}>
@@ -2042,7 +2042,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
             {idx > 0 && <button onClick={() => saveAndGo(-1)} style={btn("ghost")}> Prev</button>}
             <button onClick={() => saveAndGo(1)} style={btn("blue")}>Save & Next </button>
           </div>
-          {/* Subject time tracker */}
+         
           <div style={{ display: "flex", gap: 8, marginTop: 10, padding: "6px 0", borderTop: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap" }}>
             {SUBJECTS.map(s => {
               const t = subjectTimes.current[s] || 0;
@@ -2060,7 +2060,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
         <Palette questions={questions} answers={answers} currentIdx={idx} onJump={setIdx} marked={marked} />
       </div>
 
-      {/* Submit modal */}
+     
       {showModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
           <div style={{ ...card(), padding: 32, maxWidth: 420, width: "90%" }}>
@@ -2069,7 +2069,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
               Attempted <strong style={{ color: "#a5b4fc" }}>{attempted}</strong> of <strong>{questions.length}</strong> questions.
               {questions.length - attempted > 0 && <> <strong style={{ color: "#f87171" }}>{questions.length - attempted} unattempted.</strong></>}
             </p>
-            {/* Subject summary */}
+            
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
               {SUBJECTS.map(s => {
                 const total = questions.filter(x => x.subject === s).length;
@@ -2180,7 +2180,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0", paddingBottom: 60 }}>
-      {/* Header */}
+     
       <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>Test Completed - NEET {year}</h2>
@@ -2192,17 +2192,17 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "22px 16px" }}>
-        {/* Result tabs */}
+        
         <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
           {[["summary","Summary"],["analytics","Analytics"],["solutions","Solutions"],["bookmarks","Bookmarks (" + bookmarked.size + ")"]].map(([t,l]) => (
             <button key={t} onClick={() => setActiveTab(t)} style={btn(activeTab===t?"primary":"ghost", { padding: "8px 18px", fontSize: 13 })}>{l}</button>
           ))}
         </div>
 
-        {/* SUMMARY TAB */}
+       
         {activeTab === "summary" && (
           <div>
-            {/* Score hero */}
+            
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginBottom: 20 }}>
               <div style={{ background: "linear-gradient(135deg,rgba(99,102,241,0.2),rgba(168,85,247,0.15))", border: "1px solid rgba(99,102,241,0.35)", borderRadius: 16, padding: "24px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ fontSize: "3.5rem", fontWeight: 700, color: "#a5b4fc", lineHeight: 1 }}>{score}</div>
@@ -2229,7 +2229,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
               </div>
             </div>
 
-            {/* Rank + Percentile row */}
+           
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
               <div style={{ ...card(), padding: "16px 18px" }}>
                 <div style={{ color: "#64748b", fontSize: 12, marginBottom: 4 }}>Predicted NEET Rank</div>
@@ -2243,7 +2243,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
               </div>
             </div>
 
-            {/* Subject-wise */}
+            
             <h3 style={{ color: "#a5b4fc", marginBottom: 12, fontSize: "1rem" }}>Subject-wise Breakdown</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12, marginBottom: 20 }}>
               {subjectStats.map((s, i) => (
@@ -2266,7 +2266,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
           </div>
         )}
 
-        {/* ANALYTICS TAB */}
+        
         {activeTab === "analytics" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ ...card(), padding: "18px 20px" }}>
@@ -2305,7 +2305,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
               </div>
             </div>
 
-            {/* Question time heatmap */}
+            
             <div style={{ ...card(), padding: "18px 20px" }}>
               <h3 style={{ color: "#a5b4fc", margin: "0 0 12px", fontSize: "1rem" }}>Time per Question (seconds)</h3>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -2330,7 +2330,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
           </div>
         )}
 
-        {/* SOLUTIONS TAB */}
+       
 {activeTab === "solutions" && (
   <div>
 
@@ -2474,7 +2474,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
 
   </div>
 )}
-        {/* BOOKMARKS TAB */}
+        
         {activeTab === "bookmarks" && (
           <div>
             {bookmarked.size === 0 ? (
@@ -2499,8 +2499,8 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
                 })}
               </div>
             )}
-          </div>   {/* questions list */}
-      </div>     {/* solutions tab container */}
+          </div>   
+      </div>     
         )}
 
         <div style={{ textAlign: "center", marginTop: 36 }}>
@@ -2755,7 +2755,7 @@ export default function App() {
     return (
       <div style={{ height: "100vh", background: "#070d1a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", padding: 24 }}>
         <div style={{ maxWidth: 560, width: "100%", background: "#0f172a", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: 32 }}>
-          {/* Header */}
+          
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
             <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}></div>
             <div>
@@ -2764,12 +2764,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* Error message */}
+          
           <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "12px 16px", marginBottom: 24, color: "#fca5a5", fontSize: 14, lineHeight: 1.7 }}>
             {loadingError}
           </div>
 
-          {/* Fix steps */}
+          
           <div style={{ marginBottom: 24 }}>
             <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
               {isConfig ? " How to fix  set your credentials:" :
@@ -2785,7 +2785,7 @@ export default function App() {
             </ol>
           </div>
 
-          {/* Action buttons */}
+         
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <button
               onClick={() => { setLoadingError(null); handleStartYear(); }}
