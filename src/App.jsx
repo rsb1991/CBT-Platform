@@ -2492,15 +2492,15 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
                         <span style={{ marginLeft: 10, fontSize: 11, color: isCorrect ? "#4ade80" : "#f87171" }}>{isCorrect ? "Correct" : "Wrong"}</span>
                       </div>
                       <div style={{ padding: "14px 16px" }}>
-                        <QuestionRenderer q={q} showSolution={true} userAnswer={userAns} />
+                      <QuestionRenderer q={q} showSolution={true} userAnswer={userAns} />
                       </div>
                     </div>
                   );
                 })}
               </div>
-            
-          </div>   
-      </div>     
+            )
+          }
+            </div>        
         )}
 
         <div style={{ textAlign: "center", marginTop: 36 }}>
