@@ -2423,7 +2423,8 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
                 })}
               </div>
             )}
-          </div>
+          </div>   {/* questions list */}
+      </div>     {/* solutions tab container */}
         )}
 
         <div style={{ textAlign: "center", marginTop: 36 }}>
