@@ -2341,11 +2341,6 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
                 ))}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-              {["All",...SUBJECTS].map(s => (
-                <button key={s} onClick={() => setFilterSub(s)} style={btn(filterSub===s?"primary":"ghost", { padding: "5px 12px", fontSize: 12 })}>{s}</button>
-              ))}
-            </div>
         <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
           {["All", ...SUBJECTS].map(s => (
             <button key={s} onClick={() => setFilterSub(s)} style={{
