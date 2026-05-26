@@ -2398,7 +2398,6 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
           })}
         </div>
         )}
-
         {/* BOOKMARKS TAB */}
         {activeTab === "bookmarks" && (
           <div>
