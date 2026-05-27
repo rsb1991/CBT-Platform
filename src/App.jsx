@@ -577,10 +577,6 @@ function AdminScreen({ onSignOut }) {
   const [csvMsg,    setCsvMsg]    = useState(null);
   const [csvPreview,setCsvPreview]= useState([]);
   const [csvLoading,setCsvLoading]= useState(false);
-  const [imgBulkMsg,  setImgBulkMsg]  = useState(null);
-  const [imgBulkFiles,setImgBulkFiles]= useState([]);   // [{name, b64}]
-  const [imgBulkLoading,setImgBulkLoading] = useState(false);
-  const [imgBulkProgress,setImgBulkProgress] = useState("");
   const [settings,  setSettings]  = useState({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg,    setSettingsMsg]    = useState(null);
@@ -766,8 +762,6 @@ function AdminScreen({ onSignOut }) {
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
         paper_id:      "NEET_2025",
-        // image filename stored in _imgFile for bulk matching only
-        _imgFile: row.image || row.Image || '',
       });
     }
     return { rows, errors, error: null };
@@ -805,16 +799,10 @@ function AdminScreen({ onSignOut }) {
       await supabase.from("questions").delete().eq("paper_id", "NEET_2025");
     }
 
-    // Upload in batches of 50 - strip client-only fields before sending
+    // Upload in batches of 50
     let uploaded = 0, failed = 0;
     for (let i = 0; i < rows.length; i += 50) {
-      // Only send known DB columns - strip any client-side or CSV-only fields
-      const DB_COLS = ["number","subject","type","question_text","equation","diagram_url","diagram_data","option_a","option_b","option_c","option_d","correct","solution_text","solution_eq","chapter","difficulty","paper_id"];
-      const chunk = rows.slice(i, i + 50).map(r => {
-        const clean = {};
-        DB_COLS.forEach(k => { if (r[k] !== undefined) clean[k] = r[k]; });
-        return clean;
-      });
+      const chunk = rows.slice(i, i + 50);
       const { error } = await supabase.from("questions").insert(chunk);
       if (error) failed += chunk.length;
       else uploaded += chunk.length;
@@ -826,63 +814,6 @@ function AdminScreen({ onSignOut }) {
     csvFileRef._parsed = null;
     if (failed > 0) setCsvMsg({ type: "error", text: uploaded + " uploaded, " + failed + " failed. Check for duplicate question numbers." });
     else setCsvMsg({ type: "success", text: uploaded + " questions uploaded successfully!" });
-  };
-
-  // ── Bulk image upload: compress all picked JPGs and match to questions ────
-  const handleBulkImgFiles = async (files) => {
-    setImgBulkMsg({ type: "info", text: "Reading " + files.length + " image files..." });
-    const results = [];
-    for (const file of Array.from(files)) {
-      try {
-        const b64 = await new Promise((res, rej) => {
-          const img = new Image(), url = URL.createObjectURL(file);
-          img.onload = () => {
-            URL.revokeObjectURL(url);
-            const scale = img.width > 800 ? 800/img.width : 1;
-            const cv = document.createElement("canvas");
-            cv.width  = Math.round(img.width  * scale);
-            cv.height = Math.round(img.height * scale);
-            cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-            res(cv.toDataURL("image/jpeg", 0.78));
-          };
-          img.onerror = () => rej(new Error("Cannot read " + file.name));
-          img.src = url;
-        });
-        results.push({ name: file.name, b64 });
-      } catch (e) {
-        results.push({ name: file.name, b64: null, err: e.message });
-      }
-    }
-    setImgBulkFiles(results);
-    const ok  = results.filter(r => r.b64).length;
-    const bad = results.filter(r => !r.b64).length;
-    setImgBulkMsg({ type: ok > 0 ? "success" : "error", text: ok + " images ready" + (bad > 0 ? ", " + bad + " failed" : "") + ". Now click Upload Images to Database." });
-  };
-
-  const handleBulkImgUpload = async () => {
-    const ready = imgBulkFiles.filter(r => r.b64);
-    if (!ready.length) { setImgBulkMsg({ type: "error", text: "No images loaded. Pick files first." }); return; }
-    setImgBulkLoading(true);
-    let done = 0, fail = 0;
-    for (const img of ready) {
-      // Match by filename: e.g. "q5.jpg" matches question with number=5
-      // Also try "5.jpg", "physics_5.jpg" - extract first number found in filename
-      const numMatch = img.name.match(/(\d+)/);
-      if (!numMatch) { fail++; continue; }
-      const qNum = parseInt(numMatch[1]);
-      const { error } = await supabase
-        .from("questions")
-        .update({ diagram_data: img.b64, type: "diagram" })
-        .eq("paper_id", "NEET_2025")
-        .eq("number", qNum);
-      if (error) fail++;
-      else done++;
-      setImgBulkProgress(done + fail + "/" + ready.length + " processed");
-    }
-    setImgBulkLoading(false);
-    setImgBulkProgress("");
-    setImgBulkFiles([]);
-    setImgBulkMsg({ type: done > 0 ? "success" : "error", text: done + " images uploaded to questions." + (fail > 0 ? " " + fail + " failed (no matching question number found)." : "") });
   };
 
   //  Styles 
@@ -1006,7 +937,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12, fontSize: "0.95rem" }}>CSV Format Guide</div>
               <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 10px" }}>Your CSV file must have a header row with these exact column names:</p>
               <div style={{ background: "#070d1a", borderRadius: 8, padding: "12px 14px", fontFamily: "monospace", fontSize: 12, color: "#86efac", marginBottom: 12, overflowX: "auto" }}>
-                number,subject,question_text,equation,image,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty
+                number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
@@ -1030,10 +961,10 @@ function AdminScreen({ onSignOut }) {
               
               <button
                 onClick={() => {
-                  const sample = "number,subject,question_text,equation,image,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
-                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,q1.jpg,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy\n" +
-                    "2,Chemistry,The hybridization of carbon in diamond:,,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium\n" +
-                    "3,Physics,SI unit of electric field intensity:,,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy\n";
+                  const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
+                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy\n" +
+                    "2,Chemistry,The hybridization of carbon in diamond:,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium\n" +
+                    "3,Physics,SI unit of electric field intensity:,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy\n";
                   const blob = new Blob([sample], { type: "text/csv" });
                   const url  = URL.createObjectURL(blob);
                   const a    = document.createElement("a");
@@ -1094,53 +1025,6 @@ function AdminScreen({ onSignOut }) {
                 </button>
               </div>
             )}
-
-            {/* BULK IMAGE UPLOAD SECTION */}
-            <div style={{ ...acard, padding: "18px 20px", borderColor: "rgba(245,158,11,0.25)" }}>
-              <div style={{ color: "#fbbf24", fontWeight: 700, marginBottom: 6, fontSize: "0.95rem" }}>
-                Step 2 (optional) - Bulk Image Upload
-              </div>
-              <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 12px", lineHeight: 1.7 }}>
-                Name your image files to match question numbers: <span style={{ color: "#fbbf24", fontFamily: "monospace" }}>q1.jpg, q2.jpg, q5.jpg</span> etc.<br/>
-                Upload all images at once - they will be automatically matched to questions by number.
-              </p>
-              <div style={{ background: "#070d1a", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#64748b" }}>
-                <div style={{ color: "#a5b4fc", fontWeight: 600, marginBottom: 4 }}>Naming convention:</div>
-                <div>q1.jpg, q2.jpg  -  matches question number 1, 2</div>
-                <div>5.jpg, 10.jpg   -  also works (first number in filename used)</div>
-                <div>physics_5.jpg   -  matches question 5</div>
-                <div style={{ marginTop: 6, color: "#475569" }}>Supports JPG, PNG, WebP. Images auto-compressed to 800px.</div>
-              </div>
-              {imgBulkMsg && <div style={mstyle(imgBulkMsg)}>{imgBulkMsg.text}</div>}
-              {imgBulkProgress && <div style={{ color: "#a5b4fc", fontSize: 13, marginBottom: 10 }}>{imgBulkProgress}</div>}
-
-              {/* File preview */}
-              {imgBulkFiles.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-                  {imgBulkFiles.map((img, i) => (
-                    <div key={i} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "6px 10px", fontSize: 11, color: img.b64 ? "#4ade80" : "#f87171" }}>
-                      {img.name} {img.b64 ? "ready" : "failed"}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  onClick={() => { const inp = document.createElement("input"); inp.type="file"; inp.accept="image/jpeg,image/jpg,image/png,image/webp"; inp.multiple=true; inp.onchange=e=>handleBulkImgFiles(e.target.files); inp.click(); }}
-                  style={{ ...abtn("ghost"), flex: 1 }}
-                >
-                  Select Image Files
-                </button>
-                <button
-                  onClick={handleBulkImgUpload}
-                  disabled={imgBulkLoading || imgBulkFiles.filter(r=>r.b64).length === 0}
-                  style={{ ...abtn("success"), flex: 1, opacity: (imgBulkLoading || imgBulkFiles.filter(r=>r.b64).length === 0) ? 0.5 : 1 }}
-                >
-                  {imgBulkLoading ? "Uploading images..." : "Upload Images to Database"}
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1595,13 +1479,9 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
             </div>
           )}
           
-          <button onClick={() => setDarkMode(!darkMode)} style={{ ...btn("ghost", { padding: "6px 12px", fontSize: 12 }) }}>
-            {darkMode ? "Light Mode" : "Dark Mode"}
-          </button>
+
           
-          <button onClick={() => setHindiMode(!hindiMode)} style={{ ...btn("ghost", { padding: "6px 12px", fontSize: 12 }) }}>
-            {hindiMode ? "English Font" : "Hindi Font"}
-          </button>
+
           <div style={{ textAlign: "right" }}>
             <div style={{ color: darkMode ? "#e2e8f0" : "#1e293b", fontSize: 13, fontWeight: 600 }}>{displayName}</div>
             <div style={{ color: "#475569", fontSize: 11 }}>{user.email}</div>
@@ -1814,18 +1694,17 @@ function InstructionsScreen({ year, onBegin, onBack }) {
 // 
 // PALETTE
 // 
-function Palette({ questions, answers, currentIdx, onJump, marked }) {
-  const [activeSub, setActiveSub] = useState(SUBJECTS[0]);
-  const filtered = questions.filter(q => q.subject === activeSub);
+const SUBJ_PAL_COLOR = { Physics:"#6366f1", Chemistry:"#f59e0b", Botany:"#22c55e", Zoology:"#f43f5e" };
 
+function Palette({ questions, answers, currentIdx, onJump, marked }) {
   const getStatus = (q) => {
-    const idx = questions.indexOf(q);
+    const i   = questions.indexOf(q);
     const ans = answers[q.id] !== undefined;
-    const mk = marked.has(q.id);
+    const mk  = marked.has(q.id);
     if (mk && ans) return "marked-answered";
-    if (mk) return "marked";
-    if (ans) return "answered";
-    if (idx < currentIdx) return "not-answered";
+    if (mk)        return "marked";
+    if (ans)       return "answered";
+    if (i < currentIdx) return "not-answered";
     return "not-visited";
   };
 
@@ -1838,45 +1717,55 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
 
   return (
     <div style={{ width: 230, background: "#0a1124", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
-      
+
+      {/* Stats row */}
       <div style={{ padding: "10px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
-        {[["#22c55e", counts.a, "Ans"],["#a855f7", counts.m, "Marked"],["#ef4444", counts.n, "NA"],["#374151", counts.v, "NV"]].map(([c,n,l]) => (
-          <div key={l} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.03)", borderRadius: 7, padding: "5px 7px" }}>
-            <div style={{ width: 8, height: 8, borderRadius: 2, background: c, flexShrink: 0 }} />
-            <span style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 700 }}>{n}</span>
-            <span style={{ color: "#475569", fontSize: 10 }}>{l}</span>
+        {[["#22c55e",counts.a,"Ans"],["#a855f7",counts.m,"Mkd"],["#ef4444",counts.n,"NA"],["#374151",counts.v,"NV"]].map(([c,n,l]) => (
+          <div key={l} style={{ display:"flex", alignItems:"center", gap:5, background:"rgba(255,255,255,0.03)", borderRadius:7, padding:"5px 7px" }}>
+            <div style={{ width:8, height:8, borderRadius:2, background:c, flexShrink:0 }} />
+            <span style={{ color:"#e2e8f0", fontSize:12, fontWeight:700 }}>{n}</span>
+            <span style={{ color:"#475569", fontSize:10 }}>{l}</span>
           </div>
         ))}
       </div>
-      
-      <div style={{ padding: "7px 8px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+
+      {/* Subject colour legend */}
+      <div style={{ padding:"6px 8px", borderBottom:"1px solid rgba(255,255,255,0.07)", display:"flex", flexWrap:"wrap", gap:4 }}>
         {SUBJECTS.map(s => (
-          <button key={s} onClick={() => setActiveSub(s)} style={{
-            display: "block", width: "100%", textAlign: "left", padding: "6px 10px",
-            borderRadius: 7, marginBottom: 2, border: "none", cursor: "pointer",
-            background: activeSub === s ? "rgba(99,102,241,0.25)" : "transparent",
-            color: activeSub === s ? "#a5b4fc" : "#64748b", fontSize: 13,
-            fontWeight: activeSub === s ? 600 : 400, fontFamily: "inherit", transition: "all 0.15s"
-          }}>{s}</button>
+          <span key={s} style={{ fontSize:9, color:SUBJ_PAL_COLOR[s], background:"rgba(255,255,255,0.04)", border:"1px solid "+SUBJ_PAL_COLOR[s]+"44", borderRadius:4, padding:"2px 6px", fontWeight:700 }}>
+            {s.slice(0,3)} {questions.filter(q=>q.subject===s&&answers[q.id]!==undefined).length}/{questions.filter(q=>q.subject===s).length}
+          </span>
         ))}
       </div>
-      
-      <div style={{ flex: 1, overflowY: "auto", padding: "10px 8px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5 }}>
-          {filtered.map(q => {
-            const gi = questions.indexOf(q);
-            const isCur = gi === currentIdx;
-            return (
-              <button key={q.id} onClick={() => onJump(gi)} title={`Q${q.number}`} style={{
-                width: "100%", aspectRatio: "1", borderRadius: 6,
-                border: isCur ? "2px solid #fff" : "1.5px solid transparent",
-                background: statusColor(getStatus(q)), color: "#fff", fontSize: 10,
-                fontWeight: 700, cursor: "pointer", transition: "all 0.15s",
-                boxShadow: isCur ? "0 0 0 2px rgba(255,255,255,0.25)" : "none"
-              }}>{q.number}</button>
-            );
-          })}
-        </div>
+
+      {/* Single scrollable grid — all subjects together */}
+      <div style={{ flex:1, overflowY:"auto", padding:"8px" }}>
+        {SUBJECTS.map(s => {
+          const sqs = questions.filter(q => q.subject === s);
+          if (!sqs.length) return null;
+          return (
+            <div key={s} style={{ marginBottom:10 }}>
+              <div style={{ fontSize:9, color:SUBJ_PAL_COLOR[s], fontWeight:700, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>{s}</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:4 }}>
+                {sqs.map(q => {
+                  const gi    = questions.indexOf(q);
+                  const isCur = gi === currentIdx;
+                  return (
+                    <button key={q.id} onClick={() => onJump(gi)} title={s + " Q" + q.number}
+                      style={{ width:"100%", aspectRatio:"1", borderRadius:5,
+                        border: isCur ? "2px solid "+SUBJ_PAL_COLOR[s] : "1.5px solid transparent",
+                        background: statusColor(getStatus(q)), color:"#fff", fontSize:9, fontWeight:700,
+                        cursor:"pointer", transition:"all 0.1s",
+                        boxShadow: isCur ? "0 0 0 2px "+SUBJ_PAL_COLOR[s]+"55" : "none",
+                      }}>
+                      {q.number}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2642,8 +2531,8 @@ export default function App() {
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
-  const [darkMode,     setDarkMode]     = useState(true);
-  const [hindiMode,    setHindiMode]    = useState(false);
+  const darkMode = true; // always dark
+  const hindiMode = false;
   const [settings,     setSettings]     = useState({});   // platform_settings from Supabase
 
   // Sync theme to global context so all components can read it
