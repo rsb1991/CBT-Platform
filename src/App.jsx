@@ -2592,8 +2592,10 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
             </div>        
         )}
 
-        <div style={{ textAlign: "center", marginTop: 36 }}>
-          <button onClick={onDashboard} style={btn("primary", { padding: "13px 38px", fontSize: "1rem" })}>Back to Dashboard</button>
+        <div style={{ textAlign: "center", marginTop: 36, padding: "20px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>&#9989;</div>
+          <div style={{ color: "#4ade80", fontWeight: 700, fontSize: "1.1rem", marginBottom: 6 }}>Test Submitted Successfully</div>
+          <div style={{ color: "#64748b", fontSize: 13 }}>Your result has been saved. You may close this window.</div>
         </div>
       </div>
     </div>
