@@ -577,6 +577,10 @@ function AdminScreen({ onSignOut }) {
   const [csvMsg,    setCsvMsg]    = useState(null);
   const [csvPreview,setCsvPreview]= useState([]);
   const [csvLoading,setCsvLoading]= useState(false);
+  const [imgBulkMsg,  setImgBulkMsg]  = useState(null);
+  const [imgBulkFiles,setImgBulkFiles]= useState([]);   // [{name, b64}]
+  const [imgBulkLoading,setImgBulkLoading] = useState(false);
+  const [imgBulkProgress,setImgBulkProgress] = useState("");
   const [settings,  setSettings]  = useState({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg,    setSettingsMsg]    = useState(null);
@@ -762,6 +766,8 @@ function AdminScreen({ onSignOut }) {
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
         paper_id:      "NEET_2025",
+        // store image filename for later bulk image matching
+        _image:        row.image         || "",
       });
     }
     return { rows, errors, error: null };
@@ -814,6 +820,63 @@ function AdminScreen({ onSignOut }) {
     csvFileRef._parsed = null;
     if (failed > 0) setCsvMsg({ type: "error", text: uploaded + " uploaded, " + failed + " failed. Check for duplicate question numbers." });
     else setCsvMsg({ type: "success", text: uploaded + " questions uploaded successfully!" });
+  };
+
+  // ── Bulk image upload: compress all picked JPGs and match to questions ────
+  const handleBulkImgFiles = async (files) => {
+    setImgBulkMsg({ type: "info", text: "Reading " + files.length + " image files..." });
+    const results = [];
+    for (const file of Array.from(files)) {
+      try {
+        const b64 = await new Promise((res, rej) => {
+          const img = new Image(), url = URL.createObjectURL(file);
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            const scale = img.width > 800 ? 800/img.width : 1;
+            const cv = document.createElement("canvas");
+            cv.width  = Math.round(img.width  * scale);
+            cv.height = Math.round(img.height * scale);
+            cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+            res(cv.toDataURL("image/jpeg", 0.78));
+          };
+          img.onerror = () => rej(new Error("Cannot read " + file.name));
+          img.src = url;
+        });
+        results.push({ name: file.name, b64 });
+      } catch (e) {
+        results.push({ name: file.name, b64: null, err: e.message });
+      }
+    }
+    setImgBulkFiles(results);
+    const ok  = results.filter(r => r.b64).length;
+    const bad = results.filter(r => !r.b64).length;
+    setImgBulkMsg({ type: ok > 0 ? "success" : "error", text: ok + " images ready" + (bad > 0 ? ", " + bad + " failed" : "") + ". Now click Upload Images to Database." });
+  };
+
+  const handleBulkImgUpload = async () => {
+    const ready = imgBulkFiles.filter(r => r.b64);
+    if (!ready.length) { setImgBulkMsg({ type: "error", text: "No images loaded. Pick files first." }); return; }
+    setImgBulkLoading(true);
+    let done = 0, fail = 0;
+    for (const img of ready) {
+      // Match by filename: e.g. "q5.jpg" matches question with number=5
+      // Also try "5.jpg", "physics_5.jpg" - extract first number found in filename
+      const numMatch = img.name.match(/(\d+)/);
+      if (!numMatch) { fail++; continue; }
+      const qNum = parseInt(numMatch[1]);
+      const { error } = await supabase
+        .from("questions")
+        .update({ diagram_data: img.b64, type: "diagram" })
+        .eq("paper_id", "NEET_2025")
+        .eq("number", qNum);
+      if (error) fail++;
+      else done++;
+      setImgBulkProgress(done + fail + "/" + ready.length + " processed");
+    }
+    setImgBulkLoading(false);
+    setImgBulkProgress("");
+    setImgBulkFiles([]);
+    setImgBulkMsg({ type: done > 0 ? "success" : "error", text: done + " images uploaded to questions." + (fail > 0 ? " " + fail + " failed (no matching question number found)." : "") });
   };
 
   //  Styles 
@@ -937,7 +1000,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12, fontSize: "0.95rem" }}>CSV Format Guide</div>
               <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 10px" }}>Your CSV file must have a header row with these exact column names:</p>
               <div style={{ background: "#070d1a", borderRadius: 8, padding: "12px 14px", fontFamily: "monospace", fontSize: 12, color: "#86efac", marginBottom: 12, overflowX: "auto" }}>
-                number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty
+                number,subject,question_text,equation,image,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
@@ -961,10 +1024,10 @@ function AdminScreen({ onSignOut }) {
               
               <button
                 onClick={() => {
-                  const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
-                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy\n" +
-                    "2,Chemistry,The hybridization of carbon in diamond:,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium\n" +
-                    "3,Physics,SI unit of electric field intensity:,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy\n";
+                  const sample = "number,subject,question_text,equation,image,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
+                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,q1.jpg,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy\n" +
+                    "2,Chemistry,The hybridization of carbon in diamond:,,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium\n" +
+                    "3,Physics,SI unit of electric field intensity:,,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy\n";
                   const blob = new Blob([sample], { type: "text/csv" });
                   const url  = URL.createObjectURL(blob);
                   const a    = document.createElement("a");
@@ -1025,6 +1088,53 @@ function AdminScreen({ onSignOut }) {
                 </button>
               </div>
             )}
+
+            {/* BULK IMAGE UPLOAD SECTION */}
+            <div style={{ ...acard, padding: "18px 20px", borderColor: "rgba(245,158,11,0.25)" }}>
+              <div style={{ color: "#fbbf24", fontWeight: 700, marginBottom: 6, fontSize: "0.95rem" }}>
+                Step 2 (optional) - Bulk Image Upload
+              </div>
+              <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 12px", lineHeight: 1.7 }}>
+                Name your image files to match question numbers: <span style={{ color: "#fbbf24", fontFamily: "monospace" }}>q1.jpg, q2.jpg, q5.jpg</span> etc.<br/>
+                Upload all images at once - they will be automatically matched to questions by number.
+              </p>
+              <div style={{ background: "#070d1a", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#64748b" }}>
+                <div style={{ color: "#a5b4fc", fontWeight: 600, marginBottom: 4 }}>Naming convention:</div>
+                <div>q1.jpg, q2.jpg  -  matches question number 1, 2</div>
+                <div>5.jpg, 10.jpg   -  also works (first number in filename used)</div>
+                <div>physics_5.jpg   -  matches question 5</div>
+                <div style={{ marginTop: 6, color: "#475569" }}>Supports JPG, PNG, WebP. Images auto-compressed to 800px.</div>
+              </div>
+              {imgBulkMsg && <div style={mstyle(imgBulkMsg)}>{imgBulkMsg.text}</div>}
+              {imgBulkProgress && <div style={{ color: "#a5b4fc", fontSize: 13, marginBottom: 10 }}>{imgBulkProgress}</div>}
+
+              {/* File preview */}
+              {imgBulkFiles.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                  {imgBulkFiles.map((img, i) => (
+                    <div key={i} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "6px 10px", fontSize: 11, color: img.b64 ? "#4ade80" : "#f87171" }}>
+                      {img.name} {img.b64 ? "ready" : "failed"}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => { const inp = document.createElement("input"); inp.type="file"; inp.accept="image/jpeg,image/jpg,image/png,image/webp"; inp.multiple=true; inp.onchange=e=>handleBulkImgFiles(e.target.files); inp.click(); }}
+                  style={{ ...abtn("ghost"), flex: 1 }}
+                >
+                  Select Image Files
+                </button>
+                <button
+                  onClick={handleBulkImgUpload}
+                  disabled={imgBulkLoading || imgBulkFiles.filter(r=>r.b64).length === 0}
+                  style={{ ...abtn("success"), flex: 1, opacity: (imgBulkLoading || imgBulkFiles.filter(r=>r.b64).length === 0) ? 0.5 : 1 }}
+                >
+                  {imgBulkLoading ? "Uploading images..." : "Upload Images to Database"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
