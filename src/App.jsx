@@ -766,8 +766,7 @@ function AdminScreen({ onSignOut }) {
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
         paper_id:      "NEET_2025",
-        // store image filename for later bulk image matching
-        _image:        row.image         || "",
+        // _image is client-side only for bulk matching - NOT sent to DB
       });
     }
     return { rows, errors, error: null };
@@ -805,10 +804,13 @@ function AdminScreen({ onSignOut }) {
       await supabase.from("questions").delete().eq("paper_id", "NEET_2025");
     }
 
-    // Upload in batches of 50
+    // Upload in batches of 50 - strip client-only fields before sending
     let uploaded = 0, failed = 0;
     for (let i = 0; i < rows.length; i += 50) {
-      const chunk = rows.slice(i, i + 50);
+      const chunk = rows.slice(i, i + 50).map(r => {
+        const { _image, ...rest } = r;
+        return rest;
+      });
       const { error } = await supabase.from("questions").insert(chunk);
       if (error) failed += chunk.length;
       else uploaded += chunk.length;
