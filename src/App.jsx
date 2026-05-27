@@ -766,7 +766,8 @@ function AdminScreen({ onSignOut }) {
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
         paper_id:      "NEET_2025",
-        // image is client-side only for bulk matching - NOT sent to DB
+        // image filename stored in _imgFile for bulk matching only
+        _imgFile: row.image || row.Image || '',
       });
     }
     return { rows, errors, error: null };
@@ -807,9 +808,12 @@ function AdminScreen({ onSignOut }) {
     // Upload in batches of 50 - strip client-only fields before sending
     let uploaded = 0, failed = 0;
     for (let i = 0; i < rows.length; i += 50) {
+      // Only send known DB columns - strip any client-side or CSV-only fields
+      const DB_COLS = ["number","subject","type","question_text","equation","diagram_url","diagram_data","option_a","option_b","option_c","option_d","correct","solution_text","solution_eq","chapter","difficulty","paper_id"];
       const chunk = rows.slice(i, i + 50).map(r => {
-        const { image, ...rest } = r;
-        return rest;
+        const clean = {};
+        DB_COLS.forEach(k => { if (r[k] !== undefined) clean[k] = r[k]; });
+        return clean;
       });
       const { error } = await supabase.from("questions").insert(chunk);
       if (error) failed += chunk.length;
