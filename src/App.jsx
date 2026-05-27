@@ -766,7 +766,7 @@ function AdminScreen({ onSignOut }) {
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
         paper_id:      "NEET_2025",
-        // _image is client-side only for bulk matching - NOT sent to DB
+        // image is client-side only for bulk matching - NOT sent to DB
       });
     }
     return { rows, errors, error: null };
@@ -808,7 +808,7 @@ function AdminScreen({ onSignOut }) {
     let uploaded = 0, failed = 0;
     for (let i = 0; i < rows.length; i += 50) {
       const chunk = rows.slice(i, i + 50).map(r => {
-        const { _image, ...rest } = r;
+        const { image, ...rest } = r;
         return rest;
       });
       const { error } = await supabase.from("questions").insert(chunk);
