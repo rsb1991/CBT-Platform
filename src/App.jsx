@@ -1387,7 +1387,7 @@ function AuthScreen({ onAuth }) {
 // 
 // DASHBOARD
 // 
-function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, hindiMode, setHindiMode }) {
+function Dashboard({ user, onStart, onSignOut, settings }) {
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [tab,            setTab]            = useState("start"); // start | history | leaderboard
@@ -1460,13 +1460,13 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
   const avgScore  = history.length ? Math.round(history.reduce((s, r) => s + r.score, 0) / history.length) : null;
 
   return (
-    <div style={{ minHeight: "100vh", background: darkMode ? "#070d1a" : "#f1f5f9", fontFamily: hindiMode ? "'Kruti Dev 010', serif" : "'Crimson Pro', Georgia, serif", color: darkMode ? "#e2e8f0" : "#1e293b" }}>
+    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
         @font-face { font-family: 'Kruti Dev 010'; src: local('Kruti Dev 010'); }
       `}</style>
      
-      <div style={{ background: darkMode ? "#0f172a" : "#fff", borderBottom: "1px solid " + (darkMode ? "rgba(255,255,255,0.08)" : "#e2e8f0"), padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <span style={{ color: "#818cf8", fontWeight: 700, fontSize: "1.1rem" }}>NEET UG</span>
           <span style={{ color: "#475569", fontSize: 13, marginLeft: 10 }}>Mock Test Platform</span>
@@ -1483,7 +1483,7 @@ function Dashboard({ user, onStart, onSignOut, settings, darkMode, setDarkMode, 
           
 
           <div style={{ textAlign: "right" }}>
-            <div style={{ color: darkMode ? "#e2e8f0" : "#1e293b", fontSize: 13, fontWeight: 600 }}>{displayName}</div>
+            <div style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{displayName}</div>
             <div style={{ color: "#475569", fontSize: 11 }}>{user.email}</div>
           </div>
           <button onClick={onSignOut} style={btn("ghost", { padding: "7px 14px", fontSize: 12 })}>Sign Out</button>
@@ -2547,8 +2547,7 @@ export default function App() {
           const s = {};
           data.forEach(r => { s[r.key] = r.value; });
           setSettings(s);
-          if (s.dark_mode_default === "false") setDarkMode(false);
-          if (s.hindi_font_enabled === "true")  setHindiMode(true);
+          // dark mode is always on
         }
       } catch (_) {}
     })();
@@ -2836,7 +2835,7 @@ export default function App() {
       {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} />}
       {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
-      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} darkMode={darkMode} setDarkMode={setDarkMode} hindiMode={hindiMode} setHindiMode={setHindiMode} />}
+      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} />}
       {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} />}
       {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} />}
       {screen === SCREEN.RESULT       && (
