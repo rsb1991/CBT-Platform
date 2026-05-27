@@ -1403,6 +1403,37 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const attemptsUsed = history.length;
   const limitReached = attemptLimit > 0 && attemptsUsed >= attemptLimit;
 
+  // Live exam window countdown - ticks every second
+  const [windowTick, setWindowTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setWindowTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Compute exam window status
+  const getWindowStatus = () => {
+    const start = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
+    const end   = settings?.exam_window_end   ? new Date(settings.exam_window_end)   : null;
+    const now   = new Date();
+    if (!start || !end || isNaN(start) || isNaN(end)) return null;
+    if (now < start) return { phase: "upcoming", diff: start - now, label: "Exam opens in", end };
+    if (now >= start && now <= end) return { phase: "open", diff: end - now, label: "Exam closes in", end };
+    return { phase: "ended", diff: 0, label: "Exam ended", end };
+  };
+
+  const fmtCountdown = (ms) => {
+    if (ms <= 0) return "00:00:00";
+    const totalSec = Math.floor(ms / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (d > 0) return d + "d " + String(h).padStart(2,"0") + "h " + String(m).padStart(2,"0") + "m";
+    return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
+  };
+
+  const winStatus = getWindowStatus();
+
   useEffect(() => {
     (async () => {
       let local = [];
@@ -1489,6 +1520,60 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
           <button onClick={onSignOut} style={btn("ghost", { padding: "7px 14px", fontSize: 12 })}>Sign Out</button>
         </div>
       </div>
+
+      {/* Exam window countdown banner */}
+      {winStatus && (
+        <div style={{
+          background: winStatus.phase === "open"     ? "rgba(34,197,94,0.12)"
+                    : winStatus.phase === "upcoming" ? "rgba(99,102,241,0.12)"
+                    : "rgba(100,116,139,0.12)",
+          borderBottom: "1px solid " + (winStatus.phase === "open" ? "rgba(34,197,94,0.25)" : winStatus.phase === "upcoming" ? "rgba(99,102,241,0.25)" : "rgba(100,116,139,0.2)"),
+          padding: "12px 24px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Pulsing dot */}
+            <div style={{
+              width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+              background: winStatus.phase === "open" ? "#22c55e" : winStatus.phase === "upcoming" ? "#818cf8" : "#64748b",
+              boxShadow: winStatus.phase === "open" ? "0 0 0 3px rgba(34,197,94,0.3)" : "none",
+              animation: winStatus.phase === "open" ? "pulse 1.5s infinite" : "none",
+            }} />
+            <div>
+              <div style={{ color: winStatus.phase === "open" ? "#4ade80" : winStatus.phase === "upcoming" ? "#a5b4fc" : "#94a3b8", fontWeight: 700, fontSize: 13 }}>
+                {winStatus.phase === "open" ? "Exam is OPEN now" : winStatus.phase === "upcoming" ? "Exam opens soon" : "Exam window has ended"}
+              </div>
+              <div style={{ color: "#64748b", fontSize: 12, marginTop: 1 }}>
+                {winStatus.phase === "ended"
+                  ? "The exam window has closed."
+                  : winStatus.label + ": " + fmtCountdown(winStatus.diff)}
+              </div>
+            </div>
+          </div>
+          {/* Big countdown clock */}
+          {winStatus.phase !== "ended" && (
+            <div style={{
+              background: winStatus.phase === "open" ? "rgba(34,197,94,0.15)" : "rgba(99,102,241,0.15)",
+              border: "1px solid " + (winStatus.phase === "open" ? "rgba(34,197,94,0.3)" : "rgba(99,102,241,0.3)"),
+              borderRadius: 10, padding: "8px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "1.4rem", color: winStatus.phase === "open" ? "#4ade80" : "#a5b4fc", letterSpacing: 2 }}>
+                {fmtCountdown(winStatus.diff)}
+              </div>
+              <div style={{ color: "#64748b", fontSize: 10, marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>
+                {winStatus.phase === "open" ? "remaining" : "until open"}
+              </div>
+            </div>
+          )}
+          {/* Window times */}
+          <div style={{ fontSize: 11, color: "#475569", textAlign: "right" }}>
+            <div>Opens: {settings.exam_window_start ? new Date(settings.exam_window_start).toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</div>
+            <div>Closes: {settings.exam_window_end ? new Date(settings.exam_window_end).toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</div>
+          </div>
+        </div>
+      )}
+
+      <style>{`@keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }`}</style>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
        
