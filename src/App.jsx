@@ -2070,9 +2070,9 @@ function ExamScreen({ questions, year, onFinish, settings }) {
     });
   }, [answers, marked, bookmarks, webcamSnaps]);
 
-  // Timer - pauses when tab switches or manually paused
+  // Timer - only pauses on manual pause, keeps running during tab switch violation
   useEffect(() => {
-    if (paused || tabWarning) {
+    if (paused) {
       clearInterval(timerRef.current);
       return;
     }
@@ -2083,7 +2083,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [doFinish, paused, tabWarning]);
+  }, [doFinish, paused]);
 
   // Right-click + tab switch blocker
   useEffect(() => {
@@ -2243,7 +2243,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
             </p>
             <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 16px", marginBottom: 24, display: "inline-block" }}>
               <span style={{ color: "#f87171", fontSize: 13, fontWeight: 700 }}>Violations: {tabSwitchCount}</span>
-              <span style={{ color: "#64748b", fontSize: 12, marginLeft: 8 }}>| Timer paused</span>
+              <span style={{ color: "#f59e0b", fontSize: 12, marginLeft: 8 }}>| Timer still running</span>
             </div>
             <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 20px" }}>
               Enter the exam access code to resume.
