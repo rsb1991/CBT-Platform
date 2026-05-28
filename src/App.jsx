@@ -563,6 +563,43 @@ const acard  = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(2
 const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", correct: "0", solution_text: "", solution_eq: "" });
 const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Botany: "#22c55e", Zoology: "#f43f5e" };
 
+// Helper mini-components for admin
+function DeleteResultPanel({ supabase, onDone, abtn, ainput }) {
+  const [rid, setRid] = React.useState("");
+  const [msg, setMsg] = React.useState(null);
+  const del = async () => {
+    if (!rid.trim()) { setMsg("Enter a result ID."); return; }
+    const { error } = await supabase.from("test_results").delete().eq("id", rid.trim());
+    if (error) setMsg("Error: " + error.message);
+    else { setMsg("Deleted successfully."); setRid(""); if(onDone) onDone(); }
+  };
+  return (
+    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+      <input value={rid} onChange={e=>setRid(e.target.value)} placeholder="Result UUID..." style={{ ...ainput, flex:1, fontSize:12 }} />
+      <button onClick={del} style={{ ...abtn("danger"), padding:"9px 16px", fontSize:12, whiteSpace:"nowrap" }}>Delete</button>
+      {msg && <span style={{ color:msg.includes("Error")?"#f87171":"#4ade80", fontSize:12 }}>{msg}</span>}
+    </div>
+  );
+}
+
+function RemoveFromBatchesPanel({ supabase, abtn, ainput }) {
+  const [email, setEmail] = React.useState("");
+  const [msg,   setMsg]   = React.useState(null);
+  const remove = async () => {
+    if (!email.includes("@")) { setMsg("Enter a valid email."); return; }
+    const { error, count } = await supabase.from("batch_members").delete().eq("email", email.trim().toLowerCase());
+    if (error) setMsg("Error: " + error.message);
+    else setMsg("Removed from all batches.");
+  };
+  return (
+    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+      <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="student@example.com" style={{ ...ainput, flex:1, fontSize:12 }} />
+      <button onClick={remove} style={{ ...abtn("danger"), padding:"9px 16px", fontSize:12, whiteSpace:"nowrap" }}>Remove</button>
+      {msg && <span style={{ color:msg.includes("Error")?"#f87171":"#4ade80", fontSize:12 }}>{msg}</span>}
+    </div>
+  );
+}
+
 // ADMIN SCREEN - full page with CSV upload and Settings panel
 function AdminScreen({ onSignOut }) {
   const [tab,       setTab]       = useState("add");
@@ -588,6 +625,8 @@ function AdminScreen({ onSignOut }) {
   const [students,  setStudents]  = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [studentTab,      setStudentTab]      = useState("results"); // results | add
+  const [analyticsData,   setAnalyticsData]   = useState(null);
+  const [analyticsLoading,setAnalyticsLoading]= useState(false);
   const [batches,         setBatches]         = useState([]);
   const [batchLoading,    setBatchLoading]     = useState(false);
   const [batchMsg,        setBatchMsg]         = useState(null);
@@ -664,13 +703,13 @@ function AdminScreen({ onSignOut }) {
   };
 
   //  Load students 
-  const [reportFilter,    setReportFilter]    = useState({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date" });
+  const [reportFilter,    setReportFilter]    = useState({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date", paperId:"", nameSearch:"" });
   const [reportExpanded,  setReportExpanded]  = useState(null); // expanded row user_id+created_at
 
   const loadStudents = async () => {
     setLoadingStudents(true);
     const { data } = await supabase.from("test_results")
-      .select("id, user_id, score, correct, wrong, unattempted, total, created_at, year, percentile, subject_times")
+      .select("id, user_id, student_name, student_email, score, correct, wrong, unattempted, total, created_at, year, percentile, subject_times, paper_id")
       .order("created_at", { ascending: false })
       .limit(500);
     if (data) setStudents(data);
@@ -679,7 +718,7 @@ function AdminScreen({ onSignOut }) {
 
   // Download all reports as CSV
   const downloadReportsCSV = (rows) => {
-    const header = "S.No,User ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
+    const header = "S.No,Name,Email,Paper ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
     const lines = rows.map((r, i) => {
       const d    = new Date(r.created_at).toLocaleDateString("en-IN");
       const pct  = Math.round((r.score / 720) * 100);
@@ -1039,6 +1078,57 @@ function AdminScreen({ onSignOut }) {
 
   useEffect(() => { if (tab === "batches") loadBatches(); }, [tab]);
 
+  // Load question analytics
+  const loadAnalytics = async () => {
+    setAnalyticsLoading(true);
+    // Fetch all results with answers
+    const { data } = await supabase.from("test_results")
+      .select("answers, score, subject_times, paper_id")
+      .not("answers", "is", null)
+      .limit(500);
+    if (!data || !data.length) { setAnalyticsLoading(false); return; }
+    // Fetch questions
+    const { data: qs } = await supabase.from("questions")
+      .select("id, number, subject, question_text, paper_id")
+      .eq("paper_id", paperFilter || "NEET_2025");
+    if (!qs) { setAnalyticsLoading(false); return; }
+    // Compute per-question stats
+    const qStats = {};
+    qs.forEach(q => { qStats[q.id] = { q, attempts:0, correct:0, wrong:0, skip:0 }; });
+    data.forEach(r => {
+      const ans = r.answers || {};
+      Object.entries(ans).forEach(([qid, ua]) => {
+        if (!qStats[qid]) return;
+        qStats[qid].attempts++;
+        if (ua === undefined || ua === null) qStats[qid].skip++;
+        // We don't have correct answer here, so track attempt only
+      });
+      // Also count via questions array
+    });
+    // Better approach: re-fetch with correct answers
+    const { data: fullQs } = await supabase.from("questions")
+      .select("id, number, subject, question_text, correct, paper_id")
+      .eq("paper_id", paperFilter || "NEET_2025");
+    if (!fullQs) { setAnalyticsLoading(false); return; }
+    const stats = {};
+    fullQs.forEach(q => { stats[q.id] = { q, attempts:0, correct:0, wrong:0, skip:0 }; });
+    data.forEach(r => {
+      const ans = r.answers || {};
+      fullQs.forEach(q => {
+        if (ans[q.id] === undefined) { if(stats[q.id]) stats[q.id].skip++; }
+        else if (ans[q.id] === q.correct) { if(stats[q.id]) stats[q.id].correct++; }
+        else { if(stats[q.id]) stats[q.id].wrong++; }
+        if(stats[q.id]) stats[q.id].attempts++;
+      });
+    });
+    const arr = Object.values(stats).filter(s => s.attempts > 0);
+    arr.sort((a,b) => (a.correct/a.attempts) - (b.correct/b.attempts)); // hardest first
+    setAnalyticsData({ byQ: arr, total: data.length });
+    setAnalyticsLoading(false);
+  };
+
+  useEffect(() => { if (tab === "analytics") loadAnalytics(); }, [tab]);
+
   // Parse student CSV: email, password, full_name
   // Parse student CSV: email, password, full_name
   const parseStudentCSV = (text) => {
@@ -1123,7 +1213,7 @@ function AdminScreen({ onSignOut }) {
       <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"]].map(([t,l]) => (
+          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"],["analytics","Analytics"]].map(([t,l]) => (
             <button key={t} onClick={() => setTab(t)} style={abtn(tab===t?"primary":"ghost")}>{l + (t==="list" ? " (" + questions.length + ")" : "")}</button>
           ))}
         </div>
@@ -1760,8 +1850,9 @@ function AdminScreen({ onSignOut }) {
                 {tab === "students" && (
           <div>
             {/* Sub-tabs */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap:"wrap" }}>
               <button onClick={() => setStudentTab("results")} style={abtn(studentTab === "results" ? "primary" : "ghost")}>Exam Results</button>
+              <button onClick={() => setStudentTab("manage")}  style={abtn(studentTab === "manage"  ? "primary" : "ghost")}>Manage Students</button>
               <button onClick={() => setStudentTab("add")}     style={abtn(studentTab === "add"     ? "primary" : "ghost")}>Add Students via CSV</button>
             </div>
 
@@ -1777,11 +1868,13 @@ function AdminScreen({ onSignOut }) {
                       onClick={() => {
                         // Apply current filters before downloading
                         let rows = [...students];
-                        if (reportFilter.search) rows = rows.filter(r => r.user_id.toLowerCase().includes(reportFilter.search.toLowerCase()));
-                        if (reportFilter.minScore) rows = rows.filter(r => r.score >= +reportFilter.minScore);
-                        if (reportFilter.maxScore) rows = rows.filter(r => r.score <= +reportFilter.maxScore);
-                        if (reportFilter.dateFrom) rows = rows.filter(r => new Date(r.created_at) >= new Date(reportFilter.dateFrom));
-                        if (reportFilter.dateTo)   rows = rows.filter(r => new Date(r.created_at) <= new Date(reportFilter.dateTo + "T23:59:59"));
+                        if (reportFilter.search)     rows = rows.filter(r => r.user_id.toLowerCase().includes(reportFilter.search.toLowerCase()));
+                        if (reportFilter.nameSearch) rows = rows.filter(r => (r.student_name||"").toLowerCase().includes(reportFilter.nameSearch.toLowerCase()) || (r.student_email||"").toLowerCase().includes(reportFilter.nameSearch.toLowerCase()));
+                        if (reportFilter.paperId)    rows = rows.filter(r => (r.paper_id||"").toLowerCase().includes(reportFilter.paperId.toLowerCase()));
+                        if (reportFilter.minScore)   rows = rows.filter(r => r.score >= +reportFilter.minScore);
+                        if (reportFilter.maxScore)   rows = rows.filter(r => r.score <= +reportFilter.maxScore);
+                        if (reportFilter.dateFrom)   rows = rows.filter(r => new Date(r.created_at) >= new Date(reportFilter.dateFrom));
+                        if (reportFilter.dateTo)     rows = rows.filter(r => new Date(r.created_at) <= new Date(reportFilter.dateTo + "T23:59:59"));
                         downloadReportsCSV(rows);
                       }}
                       style={{ ...abtn("success"), fontSize: 12, padding: "8px 16px" }}>
@@ -1841,7 +1934,17 @@ function AdminScreen({ onSignOut }) {
                       </select>
                     </div>
                   </div>
-                  <button onClick={() => setReportFilter({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date" })}
+                  <div style={{ gridColumn:"1/-1", display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginTop:4 }}>
+                    <div>
+                      <label style={alabel}>Student Name</label>
+                      <input value={reportFilter.nameSearch} onChange={e=>setReportFilter(p=>({...p,nameSearch:e.target.value}))} placeholder="Name or email..." style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Paper ID (Batch)</label>
+                      <input value={reportFilter.paperId} onChange={e=>setReportFilter(p=>({...p,paperId:e.target.value}))} placeholder="e.g. BATCH_A" style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                  </div>
+                  <button onClick={() => setReportFilter({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date", paperId:"", nameSearch:"" })}
                     style={{ ...abtn("ghost"), fontSize: 11, padding: "5px 12px", marginTop: 10 }}>Clear Filters</button>
                 </div>
 
@@ -1853,11 +1956,13 @@ function AdminScreen({ onSignOut }) {
                 ) : (() => {
                   // Apply filters
                   let rows = [...students];
-                  if (reportFilter.search)   rows = rows.filter(r => r.user_id.toLowerCase().includes(reportFilter.search.toLowerCase()));
-                  if (reportFilter.minScore) rows = rows.filter(r => r.score >= +reportFilter.minScore);
-                  if (reportFilter.maxScore) rows = rows.filter(r => r.score <= +reportFilter.maxScore);
-                  if (reportFilter.dateFrom) rows = rows.filter(r => new Date(r.created_at) >= new Date(reportFilter.dateFrom));
-                  if (reportFilter.dateTo)   rows = rows.filter(r => new Date(r.created_at) <= new Date(reportFilter.dateTo + "T23:59:59"));
+                  if (reportFilter.search)     rows = rows.filter(r => r.user_id.toLowerCase().includes(reportFilter.search.toLowerCase()));
+                  if (reportFilter.nameSearch) rows = rows.filter(r => (r.student_name||"").toLowerCase().includes(reportFilter.nameSearch.toLowerCase()) || (r.student_email||"").toLowerCase().includes(reportFilter.nameSearch.toLowerCase()));
+                  if (reportFilter.paperId)    rows = rows.filter(r => (r.paper_id||"").toLowerCase().includes(reportFilter.paperId.toLowerCase()));
+                  if (reportFilter.minScore)   rows = rows.filter(r => r.score >= +reportFilter.minScore);
+                  if (reportFilter.maxScore)   rows = rows.filter(r => r.score <= +reportFilter.maxScore);
+                  if (reportFilter.dateFrom)   rows = rows.filter(r => new Date(r.created_at) >= new Date(reportFilter.dateFrom));
+                  if (reportFilter.dateTo)     rows = rows.filter(r => new Date(r.created_at) <= new Date(reportFilter.dateTo + "T23:59:59"));
                   // Sort
                   if (reportFilter.sortBy === "date")       rows.sort((a,b) => new Date(b.created_at)-new Date(a.created_at));
                   if (reportFilter.sortBy === "date_asc")   rows.sort((a,b) => new Date(a.created_at)-new Date(b.created_at));
@@ -1898,7 +2003,8 @@ function AdminScreen({ onSignOut }) {
                               onMouseLeave={e => e.currentTarget.style.background=isOpen?"rgba(99,102,241,0.1)":(i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)")}>
                               <div style={{ color: "#475569", fontSize: 11 }}>{i+1}</div>
                               <div>
-                                <div style={{ fontSize: 11, color: "#818cf8", fontFamily: "monospace" }}>{r.user_id.slice(0,14)}...</div>
+                                <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>{r.student_name || r.student_email?.split("@")[0] || r.user_id.slice(0,10)+"..."}</div>
+                              <div style={{ fontSize: 10, color: "#475569" }}>{r.student_email || r.user_id.slice(0,12)+"..."}</div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
                                   <div style={{ height: 4, width: 60, background: "rgba(0,0,0,0.2)", borderRadius: 99 }}>
                                     <div style={{ height: "100%", borderRadius: 99, background: pct>=50?"#22c55e":"#ef4444", width: pct+"%" }} />
@@ -1983,7 +2089,62 @@ function AdminScreen({ onSignOut }) {
               </div>
             )}
 
-            {/* ADD STUDENTS SUB-TAB */}
+            {/*  ANALYTICS TAB  */}
+        {tab === "analytics" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Question Analytics</div>
+                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Paper: <span style={{ color:"#fbbf24" }}>{paperFilter||"NEET_2025"}</span>  sorted hardest first</div>
+              </div>
+              <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("ghost")}>{analyticsLoading ? "Loading..." : "Refresh"}</button>
+            </div>
+            {analyticsLoading ? (
+              <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Calculating from {analyticsData?.total||0} attempts...</div>
+            ) : !analyticsData ? (
+              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>No data yet. Students need to attempt exams first.</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                {/* Header */}
+                <div style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5 }}>
+                  <div>Q#</div><div>Subject</div><div>Question</div>
+                  <div style={{ color:"#4ade80" }}>Correct</div>
+                  <div style={{ color:"#f87171" }}>Wrong</div>
+                  <div>Skip</div>
+                  <div style={{ color:"#fbbf24" }}>Accuracy</div>
+                </div>
+                {analyticsData.byQ.map((s, i) => {
+                  const acc = s.attempts > 0 ? Math.round(s.correct/s.attempts*100) : 0;
+                  const accColor = acc >= 70 ? "#4ade80" : acc >= 40 ? "#fbbf24" : "#f87171";
+                  return (
+                    <div key={s.q.id} style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
+                      <div style={{ color:"#818cf8", fontWeight:700, fontSize:12 }}>Q{s.q.number}</div>
+                      <div style={{ fontSize:10, color:"#94a3b8", background:"rgba(255,255,255,0.06)", borderRadius:4, padding:"2px 5px" }}>{s.q.subject.slice(0,4)}</div>
+                      <div style={{ fontSize:11, color:"#c7d2fe" }}>{(s.q.question_text||"").slice(0,55)}{(s.q.question_text||"").length>55?"...":""}</div>
+                      <div style={{ color:"#4ade80", fontWeight:600, fontSize:13 }}>{s.correct}</div>
+                      <div style={{ color:"#f87171", fontWeight:600, fontSize:13 }}>{s.wrong}</div>
+                      <div style={{ color:"#64748b", fontSize:13 }}>{s.skip}</div>
+                      <div>
+                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <div style={{ flex:1, height:5, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
+                            <div style={{ height:"100%", borderRadius:99, background:accColor, width:acc+"%" }} />
+                          </div>
+                          <span style={{ color:accColor, fontWeight:700, fontSize:11, minWidth:32 }}>{acc}%</span>
+                        </div>
+                        <div style={{ fontSize:9, color:"#475569", marginTop:1 }}>{s.attempts} attempts</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
+                  Based on {analyticsData.total} exam attempts. Sorted: lowest accuracy (hardest) first.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ADD STUDENTS SUB-TAB */}
             {studentTab === "add" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                 {stuCsvMsg && <div style={mstyle(stuCsvMsg)}>{stuCsvMsg.text}</div>}
@@ -2719,7 +2880,20 @@ function ExamScreen({ questions, year, onFinish, settings }) {
   const [marked,        setMarked]       = useState(new Set(saved?.marked ?? []));
   const [bookmarks,     setBookmarks]    = useState(new Set(saved?.bookmarks ?? []));
   const [sel,           setSel]          = useState(null);
-  const [timeLeft,      setTimeLeft]     = useState(saved?.timeLeft ?? TOTAL_TIME);
+  // Calculate time remaining: if window_end is set, timer counts down to that, else use TOTAL_TIME
+  const calcInitialTime = () => {
+    if (saved?.timeLeft != null) return saved.timeLeft; // restore session
+    const wEnd = settings?.exam_window_end ? new Date(settings.exam_window_end) : null;
+    const wStart = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
+    if (wEnd && wStart) {
+      const windowDuration = Math.round((wEnd - wStart) / 1000); // full window in seconds
+      const elapsed = Math.round((Date.now() - wStart.getTime()) / 1000); // already elapsed
+      const remaining = windowDuration - elapsed;
+      if (remaining > 0 && remaining < TOTAL_TIME) return remaining; // use window time
+    }
+    return TOTAL_TIME; // default 3 hours
+  };
+  const [timeLeft,      setTimeLeft]     = useState(calcInitialTime);
   const [showModal,     setShowModal]    = useState(false);
   const [restored,      setRestored]     = useState(!!saved);
   const [tabWarning,    setTabWarning]   = useState(false);
@@ -2802,15 +2976,17 @@ function ExamScreen({ questions, year, onFinish, settings }) {
     });
   }, [answers, marked, bookmarks, webcamSnaps]);
 
-  // Timer - only pauses on manual pause, keeps running during tab switch violation
+  const [timerAlert, setTimerAlert] = useState(null); // "30min"|"15min"|"5min"
+
+  // Timer - only pauses on manual pause, runs through tab switch violations
   useEffect(() => {
-    if (paused) {
-      clearInterval(timerRef.current);
-      return;
-    }
+    if (paused) { clearInterval(timerRef.current); return; }
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) { clearInterval(timerRef.current); doFinish(); return 0; }
+        if (t === 1800) setTimerAlert("30min");
+        if (t === 900)  setTimerAlert("15min");
+        if (t === 300)  setTimerAlert("5min");
         return t - 1;
       });
     }, 1000);
@@ -2960,6 +3136,19 @@ function ExamScreen({ questions, year, onFinish, settings }) {
         }}>
           <span>Session restored - your answers and timer have been saved from your last visit.</span>
           <button onClick={() => setRestored(false)} style={{ background: "none", border: "none", color: "#4ade80", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>x</button>
+        </div>
+      )}
+
+      {/* TIMER WARNING BANNER */}
+      {timerAlert && (
+        <div style={{ background: timerAlert==="5min"?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.12)", borderBottom:"1px solid "+(timerAlert==="5min"?"rgba(239,68,68,0.3)":"rgba(245,158,11,0.25)"), padding:"8px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ fontSize:18 }}>{timerAlert==="5min"?"!":"!"}</div>
+            <span style={{ color:timerAlert==="5min"?"#f87171":"#fbbf24", fontWeight:700, fontSize:14 }}>
+              {timerAlert==="5min" ? "Only 5 minutes remaining!" : timerAlert==="15min" ? "15 minutes remaining" : "30 minutes remaining"}
+            </span>
+          </div>
+          <button onClick={()=>setTimerAlert(null)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:18 }}>x</button>
         </div>
       )}
 
@@ -3163,26 +3352,79 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
   // PDF download
   const downloadPDF = () => {
     const win = window.open("", "_blank");
-    const rows = questions.map(q => {
-      const ua = answers[q.id];
-      const status = ua === undefined ? "Unattempted" : ua === q.correct ? "Correct" : "Wrong";
-      const marks  = ua === undefined ? 0 : ua === q.correct ? 4 : -1;
-      return "<tr style='border-bottom:1px solid #eee'><td>" + q.number + "</td><td>" + q.subject + "</td><td>" + (q.question_text||"").slice(0,60) + "...</td><td>" + status + "</td><td>" + (marks > 0 ? "+" : "") + marks + "</td><td>" + (timePerQ[q.id] || 0) + "s</td></tr>";
+    if (!win) return;
+    const OPTS = ["A","B","C","D"];
+    // Subject-wise summary
+    const subjSummary = ["Physics","Chemistry","Botany","Zoology"].map(s => {
+      const sq = questions.filter(q => q.subject === s);
+      const c  = sq.filter(q => answers[q.id] === q.correct).length;
+      const w  = sq.filter(q => answers[q.id] !== undefined && answers[q.id] !== q.correct).length;
+      const u  = sq.filter(q => answers[q.id] === undefined).length;
+      const sc = c*4 + w*(-1);
+      return "<tr><td><b>" + s + "</b></td><td style='color:green'>" + c + "</td><td style='color:red'>" + w + "</td><td style='color:gray'>" + u + "</td><td><b>" + sc + "</b></td></tr>";
     }).join("");
-    win.document.write(`<!DOCTYPE html><html><head><title>NEET Result ${year}</title>
-    <style>body{font-family:Arial,sans-serif;padding:20px}h1{color:#312e81}table{width:100%;border-collapse:collapse}th{background:#312e81;color:white;padding:8px}td{padding:6px;font-size:12px}.stat{display:inline-block;margin:10px;padding:10px 20px;background:#f3f4f6;border-radius:8px;text-align:center}.big{font-size:2em;font-weight:bold;color:#312e81}</style></head><body>
-    <h1>NEET ${year} Mock Test Result</h1>
-    <div class="stat"><div class="big">${score}</div><div>Score / 720</div></div>
-    <div class="stat"><div class="big">${pct}%</div><div>Percentage</div></div>
-    <div class="stat"><div class="big">${correct}</div><div>Correct</div></div>
-    <div class="stat"><div class="big">${wrong}</div><div>Wrong</div></div>
-    <div class="stat"><div class="big">${unattempted}</div><div>Unattempted</div></div>
-    <div class="stat"><div class="big">${predictRank(score)}</div><div>Predicted Rank</div></div>
-    <br/><br/><h2>Question-wise Analysis</h2>
-    <table><tr><th>Q#</th><th>Subject</th><th>Question</th><th>Status</th><th>Marks</th><th>Time</th></tr>${rows}</table>
-    </body></html>`);
+    // Full question list with solutions
+    const qRows = questions.map(q => {
+      const ua = answers[q.id];
+      const isC = ua === q.correct;
+      const isW = ua !== undefined && !isC;
+      const isU = ua === undefined;
+      const status = isC ? "CORRECT" : isW ? "WRONG" : "UNATTEMPTED";
+      const marks  = isC ? "+4" : isW ? "-1" : "0";
+      const color  = isC ? "#16a34a" : isW ? "#dc2626" : "#6b7280";
+      const optRows = ["a","b","c","d"].map((lt, i) => {
+        const optText = q["option_" + lt] || "";
+        const isAns   = ua === i;
+        const isRight = q.correct === i;
+        let bg = "transparent";
+        if (isRight) bg = "#dcfce7";
+        if (isAns && !isRight) bg = "#fee2e2";
+        return "<div style='padding:4px 10px;margin:2px 0;background:" + bg + ";border-radius:4px;font-size:12px'><b>" + OPTS[i] + ") </b>" + optText + (isRight?" <span style='color:green'>(correct)</span>":"") + (isAns&&!isRight?" <span style='color:red'>(your answer)</span>":"") + "</div>";
+      }).join("");
+      const timeS = timePerQ[q.id] || 0;
+      return "<div style='margin-bottom:18px;padding:14px;border:1px solid #e5e7eb;border-left:4px solid " + color + ";border-radius:6px;page-break-inside:avoid'>" +
+        "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
+        "<span style='font-weight:700;color:#374151'>Q" + q.number + " &nbsp; <span style='background:#f3f4f6;padding:2px 8px;border-radius:4px;font-size:11px'>" + q.subject + "</span></span>" +
+        "<span style='background:" + (isC?"#dcfce7":isW?"#fee2e2":"#f9fafb") + ";color:" + color + ";padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700'>" + status + " " + marks + "</span>" +
+        "</div>" +
+        "<p style='margin:0 0 10px;font-size:13px;color:#1f2937'>" + (q.question_text || q.equation || "") + "</p>" +
+        optRows +
+        (q.solution_text ? "<div style='margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af'><b>Solution: </b>" + q.solution_text + "</div>" : "") +
+        "<div style='margin-top:6px;font-size:10px;color:#9ca3af'>Time spent: " + (Math.floor(timeS/60)+"m "+timeS%60+"s") + "</div>" +
+        "</div>";
+    }).join("");
+
+    win.document.write("<!DOCTYPE html><html><head><title>NEET " + year + " Result</title><style>" +
+      "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
+      "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
+      "h2{color:#312e81;margin-top:28px}" +
+      ".stat{display:inline-block;margin:8px;padding:12px 20px;background:#f3f4f6;border-radius:10px;text-align:center;min-width:100px}" +
+      ".big{font-size:1.8em;font-weight:bold;color:#312e81}" +
+      ".lbl{font-size:11px;color:#6b7280;margin-top:2px}" +
+      "table{width:100%;border-collapse:collapse;margin-top:10px}" +
+      "th{background:#312e81;color:#fff;padding:8px 10px;font-size:12px;text-align:left}" +
+      "td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f3f4f6}" +
+      "@media print{.noprint{display:none}}" +
+      "</style></head><body>" +
+      "<h1>NEET " + year + " Mock Test Report</h1>" +
+      "<p style='color:#6b7280;font-size:13px'>Generated on " + new Date().toLocaleString("en-IN") + "</p>" +
+      "<div style='margin:16px 0'>" +
+      "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / 720</div></div>" +
+      "<div class='stat'><div class='big'>" + pct + "%</div><div class='lbl'>Percentage</div></div>" +
+      "<div class='stat'><div class='big'>" + correct + "</div><div class='lbl'>Correct</div></div>" +
+      "<div class='stat'><div class='big'>" + wrong + "</div><div class='lbl'>Wrong</div></div>" +
+      "<div class='stat'><div class='big'>" + unattempted + "</div><div class='lbl'>Unattempted</div></div>" +
+      "<div class='stat'><div class='big'>" + (meta?.percentile != null ? meta.percentile + "%" : "") + "</div><div class='lbl'>Percentile</div></div>" +
+      "<div class='stat'><div class='big' style='font-size:1.1em'>" + predictRank(score) + "</div><div class='lbl'>Predicted Rank</div></div>" +
+      "</div>" +
+      "<h2>Subject-wise Performance</h2>" +
+      "<table><tr><th>Subject</th><th>Correct</th><th>Wrong</th><th>Unattempted</th><th>Score</th></tr>" + subjSummary + "</table>" +
+      "<h2>All Questions with Solutions</h2>" +
+      "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green border = correct &nbsp;|&nbsp; Red border = wrong &nbsp;|&nbsp; Gray border = unattempted</p>" +
+      qRows +
+      "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
+      "</body></html>");
     win.document.close();
-    win.print();
   };
 
   let filtered = filterSub === "All" ? questions : questions.filter(q => q.subject === filterSub);
@@ -3686,6 +3928,7 @@ export default function App() {
       } catch (_) {}
     }
 
+    const studentName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
     const payload = {
       year, score, correct, wrong, unattempted,
       total: questions.length, percentile,
@@ -3693,6 +3936,9 @@ export default function App() {
       subject_times:     meta?.subjectTimes || {},
       bookmarks:         meta?.bookmarks || [],
       answers:           ans,
+      student_name:      studentName,
+      student_email:     user?.email || "",
+      paper_id:          questions[0]?.paper_id || "NEET_2025",
     };
 
     // Save to localStorage
