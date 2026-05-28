@@ -664,14 +664,39 @@ function AdminScreen({ onSignOut }) {
   };
 
   //  Load students 
+  const [reportFilter,    setReportFilter]    = useState({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date" });
+  const [reportExpanded,  setReportExpanded]  = useState(null); // expanded row user_id+created_at
+
   const loadStudents = async () => {
     setLoadingStudents(true);
     const { data } = await supabase.from("test_results")
-      .select("user_id, score, correct, wrong, unattempted, created_at, year")
+      .select("id, user_id, score, correct, wrong, unattempted, total, created_at, year, percentile, subject_times")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(500);
     if (data) setStudents(data);
     setLoadingStudents(false);
+  };
+
+  // Download all reports as CSV
+  const downloadReportsCSV = (rows) => {
+    const header = "S.No,User ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
+    const lines = rows.map((r, i) => {
+      const d    = new Date(r.created_at).toLocaleDateString("en-IN");
+      const pct  = Math.round((r.score / 720) * 100);
+      const st   = r.subject_times || {};
+      return [
+        i+1, r.user_id.slice(0,12), d, r.score, pct+"%",
+        r.correct, r.wrong, r.unattempted,
+        r.percentile != null ? r.percentile+"%" : "N/A",
+        st.Physics || 0, st.Chemistry || 0, st.Botany || 0, st.Zoology || 0
+      ].join(",");
+    });
+    const csv  = header + "\n" + lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "exam_reports_" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
+    URL.revokeObjectURL(url);
   };
 
   //  Image compression 
@@ -1742,49 +1767,219 @@ function AdminScreen({ onSignOut }) {
 
             {/* RESULTS SUB-TAB */}
             {studentTab === "results" && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <div style={{ color: "#a5b4fc", fontWeight: 700 }}>{"Student Results (" + students.length + " attempts)"}</div>
-                  <button onClick={loadStudents} style={abtn("ghost")}>Refresh</button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Header row */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "1rem" }}>{"Exam Reports (" + students.length + " attempts)"}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={loadStudents} style={abtn("ghost")}>Refresh</button>
+                    <button
+                      onClick={() => {
+                        // Apply current filters before downloading
+                        let rows = [...students];
+                        if (reportFilter.search) rows = rows.filter(r => r.user_id.toLowerCase().includes(reportFilter.search.toLowerCase()));
+                        if (reportFilter.minScore) rows = rows.filter(r => r.score >= +reportFilter.minScore);
+                        if (reportFilter.maxScore) rows = rows.filter(r => r.score <= +reportFilter.maxScore);
+                        if (reportFilter.dateFrom) rows = rows.filter(r => new Date(r.created_at) >= new Date(reportFilter.dateFrom));
+                        if (reportFilter.dateTo)   rows = rows.filter(r => new Date(r.created_at) <= new Date(reportFilter.dateTo + "T23:59:59"));
+                        downloadReportsCSV(rows);
+                      }}
+                      style={{ ...abtn("success"), fontSize: 12, padding: "8px 16px" }}>
+                      Download CSV
+                    </button>
+                  </div>
                 </div>
+
+                {/* Summary stats */}
+                {students.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                    {[
+                      ["Total Attempts",    students.length,                                                                                              "#a5b4fc"],
+                      ["Avg Score",         Math.round(students.reduce((a,r) => a+r.score, 0)/students.length) + "/720",                                 "#4ade80"],
+                      ["Highest Score",     Math.max(...students.map(r => r.score)) + "/720",                                                            "#fbbf24"],
+                      ["Pass Rate",         Math.round(students.filter(r => r.score>=360).length/students.length*100) + "%",                             "#f472b6"],
+                    ].map(([l,v,c]) => (
+                      <div key={l} style={{ ...acard, padding: "12px 14px", textAlign: "center" }}>
+                        <div style={{ color: c, fontWeight: 700, fontSize: "1.15rem" }}>{v}</div>
+                        <div style={{ color: "#64748b", fontSize: 11, marginTop: 3 }}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Filters */}
+                <div style={{ ...acard, padding: "14px 16px" }}>
+                  <div style={{ color: "#94a3b8", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Filter & Sort</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                    <div>
+                      <label style={alabel}>Search User ID</label>
+                      <input value={reportFilter.search} onChange={e => setReportFilter(p=>({...p,search:e.target.value}))} placeholder="Paste user ID..." style={{ ...ainput, fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Min Score</label>
+                      <input type="number" value={reportFilter.minScore} onChange={e => setReportFilter(p=>({...p,minScore:e.target.value}))} placeholder="0" style={{ ...ainput, fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Max Score</label>
+                      <input type="number" value={reportFilter.maxScore} onChange={e => setReportFilter(p=>({...p,maxScore:e.target.value}))} placeholder="720" style={{ ...ainput, fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Date From</label>
+                      <input type="date" value={reportFilter.dateFrom} onChange={e => setReportFilter(p=>({...p,dateFrom:e.target.value}))} style={{ ...ainput, fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Date To</label>
+                      <input type="date" value={reportFilter.dateTo} onChange={e => setReportFilter(p=>({...p,dateTo:e.target.value}))} style={{ ...ainput, fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Sort By</label>
+                      <select value={reportFilter.sortBy} onChange={e => setReportFilter(p=>({...p,sortBy:e.target.value}))} style={{ ...ainput, fontSize: 12, cursor: "pointer" }}>
+                        <option value="date">Latest First</option>
+                        <option value="date_asc">Oldest First</option>
+                        <option value="score_desc">Highest Score</option>
+                        <option value="score_asc">Lowest Score</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button onClick={() => setReportFilter({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date" })}
+                    style={{ ...abtn("ghost"), fontSize: 11, padding: "5px 12px", marginTop: 10 }}>Clear Filters</button>
+                </div>
+
+                {/* Results table */}
                 {loadingStudents ? (
                   <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading...</div>
                 ) : students.length === 0 ? (
                   <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No exam attempts yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 8 }}>
-                      {[
-                        ["Total Attempts", students.length],
-                        ["Avg Score", Math.round(students.reduce((a,r) => a + r.score, 0) / students.length) + "/720"],
-                        ["Highest", Math.max(...students.map(r => r.score)) + "/720"],
-                        ["Pass Rate (50%+)", Math.round(students.filter(r => r.score >= 360).length / students.length * 100) + "%"],
-                      ].map(([l,v]) => (
-                        <div key={l} style={{ ...acard, padding: "12px", textAlign: "center" }}>
-                          <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "1.1rem" }}>{v}</div>
-                          <div style={{ color: "#64748b", fontSize: 11, marginTop: 3 }}>{l}</div>
+                ) : (() => {
+                  // Apply filters
+                  let rows = [...students];
+                  if (reportFilter.search)   rows = rows.filter(r => r.user_id.toLowerCase().includes(reportFilter.search.toLowerCase()));
+                  if (reportFilter.minScore) rows = rows.filter(r => r.score >= +reportFilter.minScore);
+                  if (reportFilter.maxScore) rows = rows.filter(r => r.score <= +reportFilter.maxScore);
+                  if (reportFilter.dateFrom) rows = rows.filter(r => new Date(r.created_at) >= new Date(reportFilter.dateFrom));
+                  if (reportFilter.dateTo)   rows = rows.filter(r => new Date(r.created_at) <= new Date(reportFilter.dateTo + "T23:59:59"));
+                  // Sort
+                  if (reportFilter.sortBy === "date")       rows.sort((a,b) => new Date(b.created_at)-new Date(a.created_at));
+                  if (reportFilter.sortBy === "date_asc")   rows.sort((a,b) => new Date(a.created_at)-new Date(b.created_at));
+                  if (reportFilter.sortBy === "score_desc") rows.sort((a,b) => b.score-a.score);
+                  if (reportFilter.sortBy === "score_asc")  rows.sort((a,b) => a.score-b.score);
+
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      {/* Table header */}
+                      <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 110px 90px 80px 80px 80px 70px", gap: 8, padding: "8px 14px", background: "rgba(99,102,241,0.15)", borderRadius: "10px 10px 0 0", fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 }}>
+                        <div>#</div>
+                        <div>User</div>
+                        <div>Date & Time</div>
+                        <div>Score</div>
+                        <div style={{ color: "#4ade80" }}>Correct</div>
+                        <div style={{ color: "#f87171" }}>Wrong</div>
+                        <div>Skip</div>
+                        <div>Pctile</div>
+                      </div>
+
+                      {rows.length === 0 ? (
+                        <div style={{ textAlign: "center", color: "#475569", padding: 20, fontSize: 13 }}>No results match filters.</div>
+                      ) : rows.map((r, i) => {
+                        const pct      = Math.round((r.score / 720) * 100);
+                        const date     = new Date(r.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" });
+                        const time     = new Date(r.created_at).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
+                        const isOpen   = reportExpanded === r.id;
+                        const st       = r.subject_times || {};
+                        const subjList = ["Physics","Chemistry","Botany","Zoology"];
+
+                        return (
+                          <div key={r.id || i}>
+                            {/* Main row */}
+                            <div
+                              onClick={() => setReportExpanded(isOpen ? null : r.id)}
+                              style={{ display: "grid", gridTemplateColumns: "28px 1fr 110px 90px 80px 80px 80px 70px", gap: 8, padding: "10px 14px", background: isOpen ? "rgba(99,102,241,0.1)" : (i%2===0 ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.015)"), cursor: "pointer", borderRadius: isOpen ? "0" : "0", alignItems: "center", transition: "background 0.15s" }}
+                              onMouseEnter={e => e.currentTarget.style.background="rgba(99,102,241,0.08)"}
+                              onMouseLeave={e => e.currentTarget.style.background=isOpen?"rgba(99,102,241,0.1)":(i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)")}>
+                              <div style={{ color: "#475569", fontSize: 11 }}>{i+1}</div>
+                              <div>
+                                <div style={{ fontSize: 11, color: "#818cf8", fontFamily: "monospace" }}>{r.user_id.slice(0,14)}...</div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+                                  <div style={{ height: 4, width: 60, background: "rgba(0,0,0,0.2)", borderRadius: 99 }}>
+                                    <div style={{ height: "100%", borderRadius: 99, background: pct>=50?"#22c55e":"#ef4444", width: pct+"%" }} />
+                                  </div>
+                                  <span style={{ fontSize: 10, color: "#64748b" }}>{pct}%</span>
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 11, color: "#94a3b8" }}>{date}<br/><span style={{ color: "#475569" }}>{time}</span></div>
+                              <div style={{ fontWeight: 700, color: pct>=50?"#4ade80":"#f87171", fontSize: "0.9rem" }}>{r.score}<span style={{ color: "#374151", fontWeight: 400, fontSize: 10 }}>/720</span></div>
+                              <div style={{ color: "#4ade80", fontWeight: 600, fontSize: 13 }}>{r.correct}</div>
+                              <div style={{ color: "#f87171", fontWeight: 600, fontSize: 13 }}>{r.wrong}</div>
+                              <div style={{ color: "#64748b", fontSize: 13 }}>{r.unattempted}</div>
+                              <div style={{ color: "#fbbf24", fontSize: 12 }}>{r.percentile != null ? r.percentile+"%" : ""}</div>
+                            </div>
+
+                            {/* Expanded detail row */}
+                            {isOpen && (
+                              <div style={{ background: "rgba(99,102,241,0.06)", borderTop: "1px solid rgba(99,102,241,0.15)", padding: "14px 18px", display: "flex", gap: 16, flexWrap: "wrap" }}>
+                                {/* Subject time breakdown */}
+                                <div style={{ flex: 1, minWidth: 200 }}>
+                                  <div style={{ color: "#a5b4fc", fontSize: 11, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>Time per Subject</div>
+                                  {subjList.map(s => {
+                                    const t = st[s] || 0;
+                                    const tot = subjList.reduce((a,b) => a+(st[b]||0), 0) || 1;
+                                    return (
+                                      <div key={s} style={{ marginBottom: 6 }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 2 }}>
+                                          <span style={{ color: "#94a3b8" }}>{s}</span>
+                                          <span style={{ color: "#64748b" }}>{Math.floor(t/60)}m {t%60}s</span>
+                                        </div>
+                                        <div style={{ height: 4, background: "rgba(0,0,0,0.2)", borderRadius: 99 }}>
+                                          <div style={{ height: "100%", borderRadius: 99, background: "#6366f1", width: Math.round(t/tot*100)+"%" }} />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Score breakdown */}
+                                <div style={{ flex: 1, minWidth: 160 }}>
+                                  <div style={{ color: "#a5b4fc", fontSize: 11, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>Score Breakdown</div>
+                                  {[
+                                    ["Correct",     r.correct,     "+"+r.correct*4+" marks",    "#4ade80"],
+                                    ["Wrong",       r.wrong,       "-"+r.wrong+" marks",          "#f87171"],
+                                    ["Unattempted", r.unattempted, "0 marks",                    "#64748b"],
+                                    ["Total Score", r.score+"/720","",                           "#a5b4fc"],
+                                  ].map(([l,v,extra,c]) => (
+                                    <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                                      <span style={{ color: "#94a3b8" }}>{l}</span>
+                                      <span style={{ color: c, fontWeight: 600 }}>{v} <span style={{ color: "#475569", fontWeight: 400, fontSize: 10 }}>{extra}</span></span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* Download individual report */}
+                                <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); downloadReportsCSV([r]); }}
+                                    style={{ ...abtn("ghost"), fontSize: 11, padding: "6px 12px" }}>
+                                    Download Row
+                                  </button>
+                                  <div style={{ fontSize: 10, color: "#374151", textAlign: "center" }}>User: {r.user_id.slice(0,8)}</div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Footer */}
+                      {rows.length > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(99,102,241,0.08)", borderRadius: "0 0 10px 10px", fontSize: 12 }}>
+                          <span style={{ color: "#64748b" }}>{"Showing " + rows.length + " of " + students.length + " attempts"}</span>
+                          <button
+                            onClick={() => downloadReportsCSV(rows)}
+                            style={{ ...abtn("success"), fontSize: 11, padding: "6px 14px" }}>
+                            Download Filtered CSV
+                          </button>
                         </div>
-                      ))}
+                      )}
                     </div>
-                    {students.map((r, i) => {
-                      const pct  = Math.round((r.score / 720) * 100);
-                      const date = new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-                      return (
-                        <div key={i} style={{ ...acard, display: "flex", alignItems: "center", gap: 14, padding: "12px 16px" }}>
-                          <div style={{ width: 44, height: 44, borderRadius: "50%", background: pct>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border: "2px solid "+(pct>=50?"#22c55e":"#ef4444"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: pct>=50?"#4ade80":"#f87171", fontSize: 12, flexShrink: 0 }}>{pct}%</div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 11, color: "#818cf8", fontFamily: "monospace" }}>{r.user_id.slice(0,8) + "..."}</div>
-                            <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}</div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ fontWeight: 700, color: "#e2e8f0" }}>{r.score} / 720</div>
-                            <div style={{ fontSize: 11, color: "#64748b" }}>C:{r.correct} W:{r.wrong} U:{r.unattempted}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
 
