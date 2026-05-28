@@ -1222,7 +1222,6 @@ function AdminScreen({ onSignOut }) {
               
               <button
                 onClick={() => {
-                  const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
                   const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty,paper_id\n" +
                     "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy,NEET_2025\n" +
                     "2,Chemistry,The hybridization of carbon in diamond:,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium,NEET_2025\n" +
