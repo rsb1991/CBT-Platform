@@ -597,6 +597,9 @@ function AdminScreen({ onSignOut }) {
   const [batchMemberInput,setBatchMemberInput] = useState(""); // paste emails
   const [batchMemberCsv,  setBatchMemberCsv]  = useState(null);
   const [batchView,       setBatchView]        = useState("list"); // list | edit
+  const [addStudentRows,  setAddStudentRows]   = useState([{ email:"", password:"", name:"" }]);
+  const [addStudentMsg,   setAddStudentMsg]    = useState(null);
+  const [addStudentLoading,setAddStudentLoading] = useState(false);
   const [stuCsvMsg,       setStuCsvMsg]       = useState(null);
   const [stuCsvRows,      setStuCsvRows]      = useState(null);
   const [stuCsvPreview,   setStuCsvPreview]   = useState([]);
@@ -888,6 +891,37 @@ function AdminScreen({ onSignOut }) {
     setImgBulkProgress("");
     setImgBulkFiles([]);
     setImgBulkMsg({ type: done > 0 ? "success" : "error", text: done + " images uploaded." + (fail > 0 ? " " + fail + " failed (no matching Q number found)." : "") });
+  };
+
+  // Create student accounts and add to batch in one step
+  const createStudentsInBatch = async () => {
+    const valid = addStudentRows.filter(r => r.email.includes("@") && r.password.length >= 6);
+    if (!valid.length) { setAddStudentMsg({ type:"error", text:"Add at least one student with valid email and password (min 6 chars)." }); return; }
+    setAddStudentLoading(true);
+    setAddStudentMsg({ type:"info", text:"Creating accounts..." });
+    let done = 0, fail = 0, failMsgs = [];
+    for (const s of valid) {
+      try {
+        // Create Supabase auth account
+        const { data, error } = await supabase.auth.signUp({
+          email: s.email.trim().toLowerCase(),
+          password: s.password,
+          options: { data: { full_name: s.name.trim() } }
+        });
+        if (error) { fail++; failMsgs.push(s.email + ": " + error.message); continue; }
+        // Add to batch members
+        await supabase.from("batch_members").upsert([{ batch_id: selectedBatch.id, email: s.email.trim().toLowerCase() }], { onConflict: "batch_id,email" });
+        done++;
+      } catch (e) { fail++; failMsgs.push(s.email + ": " + e.message); }
+    }
+    setAddStudentLoading(false);
+    let msg = done + " student(s) created and added to batch.";
+    if (fail > 0) msg += " " + fail + " failed: " + failMsgs.slice(0,3).join("; ");
+    setAddStudentMsg({ type: done > 0 ? "ok" : "error", text: msg });
+    if (done > 0) {
+      setAddStudentRows([{ email:"", password:"", name:"" }]);
+      loadBatchDetail(selectedBatch);
+    }
   };
 
   // Load batches
@@ -1552,38 +1586,81 @@ function AdminScreen({ onSignOut }) {
                   </div>
                 </div>
 
-                {/* Members section */}
+                {/* CREATE + ADD STUDENTS */}
                 <div style={{ ...acard, padding: "18px 20px" }}>
-                  <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12 }}>{"Members (" + batchMembers.length + ")"}</div>
-                  
-                  <div style={{ marginBottom: 14 }}>
-                    <label style={alabel}>Add members - paste emails (comma or newline separated) or upload CSV</label>
-                    <textarea
-                      value={batchMemberInput}
-                      onChange={e => setBatchMemberInput(e.target.value)}
-                      placeholder={"student1@example.com\nstudent2@example.com\nstudent3@example.com"}
-                      style={{ ...ainput, minHeight: 80, resize: "vertical", lineHeight: 1.6, marginBottom: 8 }}
-                    />
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={addBatchMembers} style={abtn("success")}>Add Members</button>
-                      <button onClick={() => { const i=document.createElement("input"); i.type="file"; i.accept=".csv"; i.onchange=e=>handleBatchMemberCsv(e.target.files[0]); i.click(); }} style={abtn("ghost")}>Upload CSV</button>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 4 }}>Add New Students</div>
+                  <div style={{ color: "#64748b", fontSize: 12, marginBottom: 14 }}>Create accounts and add to this batch in one step.</div>
+
+                  {addStudentMsg && <div style={mstyle(addStudentMsg)}>{addStudentMsg.text}</div>}
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 32px", gap: 8 }}>
+                      <div style={{ color: "#64748b", fontSize: 11, textTransform: "uppercase" }}>Email *</div>
+                      <div style={{ color: "#64748b", fontSize: 11, textTransform: "uppercase" }}>Password * (min 6)</div>
+                      <div style={{ color: "#64748b", fontSize: 11, textTransform: "uppercase" }}>Full Name</div>
+                      <div />
                     </div>
+                    {addStudentRows.map((row, i) => (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 32px", gap: 8, alignItems: "center" }}>
+                        <input type="email" value={row.email} placeholder="email@example.com"
+                          onChange={e => setAddStudentRows(p => p.map((r,j) => j===i ? { ...r, email: e.target.value } : r))}
+                          style={{ ...ainput, padding: "8px 10px", fontSize: 12 }} />
+                        <input type="text" value={row.password} placeholder="password"
+                          onChange={e => setAddStudentRows(p => p.map((r,j) => j===i ? { ...r, password: e.target.value } : r))}
+                          style={{ ...ainput, padding: "8px 10px", fontSize: 12, fontFamily: "monospace" }} />
+                        <input type="text" value={row.name} placeholder="Name (optional)"
+                          onChange={e => setAddStudentRows(p => p.map((r,j) => j===i ? { ...r, name: e.target.value } : r))}
+                          style={{ ...ainput, padding: "8px 10px", fontSize: 12 }} />
+                        <button onClick={() => setAddStudentRows(p => p.length > 1 ? p.filter((_,j) => j!==i) : [{ email:"", password:"", name:"" }])}
+                          style={{ background:"none", border:"none", color:"#475569", cursor:"pointer", fontSize:18, padding:0 }}>x</button>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Member list */}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                    <button onClick={() => setAddStudentRows(p => [...p, { email:"", password:"", name:"" }])}
+                      style={{ ...abtn("ghost"), fontSize: 12, padding: "7px 14px" }}>+ Add Row</button>
+                    <button onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept=".csv"; inp.onchange=e=>{ const rd=new FileReader(); rd.onload=ev=>{ const rows=ev.target.result.split(/
+?
+/).slice(1).filter(l=>l.trim()).map(l=>{ const cols=(l+",,,").split(","); return { email:(cols[0]||"").trim(), password:(cols[1]||"").trim(), name:(cols[2]||"").trim() }; }).filter(r=>r.email); setAddStudentRows(rows.length?rows:[{email:"",password:"",name:""}]); setAddStudentMsg({type:"ok",text:rows.length+" rows loaded."}); }; rd.readAsText(e.target.files[0]); }; inp.click(); }}
+                      style={{ ...abtn("ghost"), fontSize: 12, padding: "7px 14px" }}>Import CSV</button>
+                    <button onClick={() => { const s="email,password,full_name\nstudent1@example.com,Pass@1234,Rahul Sharma\n"; const b=new Blob([s],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u;a.download="template.csv";a.click();URL.revokeObjectURL(u); }}
+                      style={{ ...abtn("ghost"), fontSize: 12, padding: "7px 14px" }}>Download Template</button>
+                  </div>
+
+                  <button onClick={createStudentsInBatch} disabled={addStudentLoading}
+                    style={{ ...abtn("success"), padding: "11px 24px", opacity: addStudentLoading ? 0.6 : 1 }}>
+                    {addStudentLoading ? "Creating..." : "Create " + addStudentRows.filter(r=>r.email.includes("@")&&r.password.length>=6).length + " Student(s) and Add to Batch"}
+                  </button>
+                </div>
+
+                {/* CURRENT MEMBERS LIST */}
+                <div style={{ ...acard, padding: "18px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ color: "#a5b4fc", fontWeight: 700 }}>{"Current Members (" + batchMembers.length + ")"}</div>
+                    <button onClick={() => loadBatchDetail(selectedBatch)} style={{ ...abtn("ghost"), padding: "5px 10px", fontSize: 11 }}>Refresh</button>
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={alabel}>Add existing accounts by email</label>
+                    <textarea value={batchMemberInput} onChange={e => setBatchMemberInput(e.target.value)}
+                      placeholder="existing@student.com"
+                      style={{ ...ainput, minHeight: 50, resize: "vertical", lineHeight: 1.6, marginBottom: 8, fontSize: 12 }} />
+                    <button onClick={addBatchMembers} style={{ ...abtn("primary"), fontSize: 12, padding: "7px 16px" }}>Add to Batch</button>
+                  </div>
                   {batchMembers.length > 0 ? (
-                    <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 5 }}>
+                    <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
                       {batchMembers.map((m, i) => (
                         <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "7px 12px" }}>
                           <span style={{ color: "#c7d2fe", fontSize: 13 }}>{m.email}</span>
-                          <button onClick={() => removeBatchMember(m.email)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>x</button>
+                          <button onClick={() => removeBatchMember(m.email)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:16, padding:"0 4px" }}>x</button>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div style={{ textAlign: "center", color: "#475569", padding: 20, fontSize: 13 }}>No members yet. Add emails above.</div>
+                    <div style={{ textAlign: "center", color: "#475569", padding: 16, fontSize: 13 }}>No members yet.</div>
                   )}
                 </div>
+
 
                 {/* Exam settings for this batch */}
                 <div style={{ ...acard, padding: "18px 20px" }}>
