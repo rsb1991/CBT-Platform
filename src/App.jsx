@@ -1837,6 +1837,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
                   const isCur = gi === currentIdx;
                   return (
                     <button key={q.id} onClick={() => onJump(gi)} title={s + " Q" + q.number}
+                      className="pal-btn"
                       style={{ width:"100%", aspectRatio:"1", borderRadius:5,
                         border: isCur ? "2px solid "+SUBJ_PAL_COLOR[s] : "1.5px solid transparent",
                         background: statusColor(getStatus(q)), color:"#fff", fontSize:9, fontWeight:700,
@@ -2108,7 +2109,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
           </div>
 
          
-          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 13, padding: "22px 26px", marginBottom: 4 }}>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 13, padding: "18px 20px", marginBottom: 4 }}>
             <div style={{ color: "#64748b", fontWeight: 700, marginBottom: 12, fontFamily: "monospace", fontSize: 13 }}>
               Q{q.number}.
             </div>
@@ -2918,34 +2919,77 @@ export default function App() {
         input:-webkit-autofill { -webkit-box-shadow: 0 0 0 100px #1e293b inset !important; -webkit-text-fill-color: #e2e8f0 !important; }
         /* Prevent zoom on input focus on iOS/Android */
         input, select, textarea { font-size: 16px !important; }
-        /* Mobile responsive */
-        @media (max-width: 700px) {
-          .mob-col { flex-direction: column !important; }
-          .mob-full { width: 100% !important; max-width: 100% !important; }
-          .mob-hide { display: none !important; }
-          .mob-small { font-size: 11px !important; }
-          .mob-pad { padding: 12px !important; }
-          .mob-grid2 { grid-template-columns: 1fr 1fr !important; }
-          .mob-grid1 { grid-template-columns: 1fr !important; }
-          .mob-wrap { flex-wrap: wrap !important; }
-          .mob-scroll { overflow-x: auto !important; }
-        }
         @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* Mobile exam layout */
         @media (max-width: 700px) {
-          .mob-col { flex-direction: column-reverse !important; }
-          .mob-palette { width: 100% !important; max-height: 200px !important; border-left: none !important; border-top: 1px solid rgba(255,255,255,0.08) !important; }
-          .mob-palette > div:first-child { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; padding: 8px !important; overflow-x: auto !important; }
-          .mob-pal-scroll { display: flex !important; flex-direction: row !important; overflow-x: auto !important; gap: 10px !important; flex: 1 !important; padding: 6px 8px !important; }
-          .mob-pal-section { min-width: 70px !important; }
-          .exam-timer { font-size: 0.9rem !important; padding: 4px 10px !important; }
-          .exam-submit { padding: 7px 12px !important; font-size: 11px !important; }
+          /* General */
+          .mob-full  { width: 100% !important; max-width: 100% !important; }
+          .mob-hide  { display: none !important; }
+          .mob-grid2 { grid-template-columns: 1fr 1fr !important; }
+          .mob-grid1 { grid-template-columns: 1fr !important; }
+          /* Exam: stack question ON TOP, palette as thin strip at bottom */
+          .mob-col   { flex-direction: column !important; overflow: hidden !important; }
+          /* Question area takes all available space */
+          .mob-col > div:first-child { flex: 1 !important; min-height: 0 !important; overflow-y: auto !important; padding: 12px 14px !important; }
+          /* Palette becomes a compact fixed-height strip at bottom */
+          .mob-palette {
+            width: 100% !important;
+            height: 130px !important;
+            min-height: 130px !important;
+            max-height: 130px !important;
+            border-left: none !important;
+            border-top: 1px solid rgba(255,255,255,0.1) !important;
+            flex-direction: row !important;
+            overflow: hidden !important;
+          }
+          /* Stats row inside palette: horizontal compact */
+          .mob-palette > div:nth-child(1) {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 3px !important;
+            padding: 6px !important;
+            border-bottom: none !important;
+            border-right: 1px solid rgba(255,255,255,0.07) !important;
+            min-width: 60px !important;
+            max-width: 60px !important;
+            font-size: 10px !important;
+          }
+          /* Legend row: hide on mobile to save space */
+          .mob-palette > div:nth-child(2) { display: none !important; }
+          /* Grid scroll area: takes remaining width */
+          .mob-pal-scroll {
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: row !important;
+            overflow-x: auto !important;
+            gap: 6px !important;
+            padding: 6px 8px !important;
+            align-items: flex-start !important;
+          }
+          /* Each subject section in palette */
+          .mob-pal-section {
+            flex-shrink: 0 !important;
+            min-width: 60px !important;
+          }
+          /* Question buttons in palette: smaller on mobile */
+          .mob-pal-section .pal-btn {
+            width: 22px !important;
+            height: 22px !important;
+            font-size: 8px !important;
+          }
+          /* Subject label in palette */
+          .mob-pal-section > div:first-child { font-size: 7px !important; margin-bottom: 3px !important; }
+          /* Palette question grid */
+          .mob-pal-section > div:last-child { gap: 2px !important; }
+          /* Hide subject tabs in header on mobile */
           .exam-subj-tabs { display: none !important; }
-          .mob-action-row { flex-wrap: wrap !important; gap: 6px !important; }
-          .mob-action-row button { flex: 1 !important; min-width: 80px !important; padding: 10px 6px !important; font-size: 11px !important; }
-          .time-strip { font-size: 9px !important; }
-          .q-meta { font-size: 10px !important; }
+          /* Action buttons */
+          .mob-action-row { gap: 5px !important; }
+          .mob-action-row button { padding: 9px 8px !important; font-size: 11px !important; flex: 1 !important; min-width: 0 !important; }
+          /* Time strip */
+          .time-strip span { font-size: 9px !important; }
+          /* Header */
+          .exam-timer { font-size: 13px !important; padding: 4px 10px !important; }
         }
       `}</style>
 
