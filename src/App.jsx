@@ -577,6 +577,10 @@ function AdminScreen({ onSignOut }) {
   const [csvMsg,    setCsvMsg]    = useState(null);
   const [csvPreview,setCsvPreview]= useState([]);
   const [csvLoading,setCsvLoading]= useState(false);
+  const [imgBulkMsg,     setImgBulkMsg]     = useState(null);
+  const [imgBulkFiles,   setImgBulkFiles]   = useState([]);
+  const [imgBulkLoading, setImgBulkLoading] = useState(false);
+  const [imgBulkProgress,setImgBulkProgress]= useState("");
   const [settings,  setSettings]  = useState({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg,    setSettingsMsg]    = useState(null);
@@ -816,6 +820,60 @@ function AdminScreen({ onSignOut }) {
     else setCsvMsg({ type: "success", text: uploaded + " questions uploaded successfully!" });
   };
 
+  // Bulk image upload: compress all picked JPGs and match to questions by filename number
+  const handleBulkImgFiles = async (files) => {
+    setImgBulkMsg({ type: "info", text: "Reading " + files.length + " image files..." });
+    const results = [];
+    for (const file of Array.from(files)) {
+      try {
+        const b64 = await new Promise((res, rej) => {
+          const img = new Image(), url = URL.createObjectURL(file);
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            const scale = img.width > 800 ? 800/img.width : 1;
+            const cv = document.createElement("canvas");
+            cv.width  = Math.round(img.width  * scale);
+            cv.height = Math.round(img.height * scale);
+            cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+            res(cv.toDataURL("image/jpeg", 0.78));
+          };
+          img.onerror = () => rej(new Error("Cannot read " + file.name));
+          img.src = url;
+        });
+        results.push({ name: file.name, b64 });
+      } catch (e) {
+        results.push({ name: file.name, b64: null, err: e.message });
+      }
+    }
+    setImgBulkFiles(results);
+    const ok  = results.filter(r => r.b64).length;
+    const bad = results.filter(r => !r.b64).length;
+    setImgBulkMsg({ type: ok > 0 ? "success" : "error", text: ok + " images ready" + (bad > 0 ? ", " + bad + " failed" : "") + ". Click Upload to save." });
+  };
+
+  const handleBulkImgUpload = async () => {
+    const ready = imgBulkFiles.filter(r => r.b64);
+    if (!ready.length) { setImgBulkMsg({ type: "error", text: "No images loaded. Select files first." }); return; }
+    setImgBulkLoading(true);
+    let done = 0, fail = 0;
+    for (const img of ready) {
+      const numMatch = img.name.match(/(\d+)/);
+      if (!numMatch) { fail++; continue; }
+      const qNum = parseInt(numMatch[1]);
+      const { error } = await supabase
+        .from("questions")
+        .update({ diagram_data: img.b64, type: "diagram" })
+        .eq("paper_id", "NEET_2025")
+        .eq("number", qNum);
+      if (error) fail++; else done++;
+      setImgBulkProgress(done + fail + "/" + ready.length);
+    }
+    setImgBulkLoading(false);
+    setImgBulkProgress("");
+    setImgBulkFiles([]);
+    setImgBulkMsg({ type: done > 0 ? "success" : "error", text: done + " images uploaded." + (fail > 0 ? " " + fail + " failed (no matching Q number found)." : "") });
+  };
+
   //  Styles 
   const mstyle = (m) => !m ? {} : {
     borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 14, whiteSpace: "pre-line",
@@ -1025,6 +1083,46 @@ function AdminScreen({ onSignOut }) {
                 </button>
               </div>
             )}
+
+            {/* BULK IMAGE UPLOAD */}
+            <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 12, padding: "18px 20px", marginTop: 8 }}>
+              <div style={{ color: "#fbbf24", fontWeight: 700, marginBottom: 8, fontSize: "0.95rem" }}>Step 2 (optional) - Bulk Image Upload</div>
+              <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 10px", lineHeight: 1.7 }}>
+                Name your image files to match question numbers:
+                <span style={{ color: "#fbbf24", fontFamily: "monospace", marginLeft: 6 }}>q1.jpg, q2.jpg, q5.jpg</span><br />
+                Select all images at once - auto-matched to questions by number in filename.
+              </p>
+              <div style={{ background: "#070d1a", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 11, color: "#64748b" }}>
+                <div style={{ color: "#a5b4fc", fontWeight: 600, marginBottom: 3 }}>Naming examples:</div>
+                <div>q1.jpg, q2.jpg  matches Q1, Q2</div>
+                <div>5.jpg, 10.jpg   also works</div>
+                <div>physics_5.jpg   matches Q5</div>
+              </div>
+              {imgBulkMsg && <div style={mstyle(imgBulkMsg)}>{imgBulkMsg.text}</div>}
+              {imgBulkProgress && <div style={{ color: "#a5b4fc", fontSize: 13, marginBottom: 8 }}>Uploading: {imgBulkProgress}</div>}
+              {imgBulkFiles.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {imgBulkFiles.map((img, i) => (
+                    <div key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: img.b64 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", color: img.b64 ? "#4ade80" : "#f87171" }}>
+                      {img.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => { const inp = document.createElement("input"); inp.type="file"; inp.accept="image/jpeg,image/jpg,image/png,image/webp"; inp.multiple=true; inp.onchange=e=>handleBulkImgFiles(e.target.files); inp.click(); }}
+                  style={{ ...abtn("ghost"), flex: 1 }}>
+                  Select Image Files
+                </button>
+                <button
+                  onClick={handleBulkImgUpload}
+                  disabled={imgBulkLoading || imgBulkFiles.filter(r=>r.b64).length === 0}
+                  style={{ ...abtn("success"), flex: 1, opacity: (imgBulkLoading || imgBulkFiles.filter(r=>r.b64).length===0) ? 0.5 : 1 }}>
+                  {imgBulkLoading ? "Uploading..." : "Upload Images to Database"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
