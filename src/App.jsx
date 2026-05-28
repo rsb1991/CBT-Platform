@@ -1222,10 +1222,11 @@ function AdminScreen({ onSignOut }) {
               
               <button
                 onClick={() => {
-                  const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty,paper_id\n" +
-                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy,NEET_2025\n" +
-                    "2,Chemistry,The hybridization of carbon in diamond:,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium,NEET_2025\n" +
-                    "3,Physics,SI unit of electric field intensity:,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy,BATCH_B_TEST\n";
+                  const sample = "number,subject,question_text,equation,image,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty,paper_id\n" +
+                    "1,Physics,A ball thrown at 20 m/s max height (g=10):,,q1.jpg,10 m,20 m,30 m,40 m,1,h=u2/2g=20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy,NEET_2025\n" +
+                    "2,Chemistry,Hybridization of carbon in diamond:,,,sp,sp2,sp3,sp3d,2,4 sigma bonds so sp3.,,Bonding,medium,NEET_2025\n" +
+                    "3,Physics,SI unit of electric field:,,,C/m,N/C,N.m,J/C2,1,E=F/q so N/C.,,Electrostatics,easy,BATCH_B\n";
+                  const blob = new Blob([sample], { type: "text/csv" });
                   const url  = URL.createObjectURL(blob);
                   const a    = document.createElement("a");
                   a.href = url; a.download = "sample_questions.csv"; a.click();
@@ -3426,16 +3427,17 @@ export default function App() {
     setScreen(SCREEN.LANDING);
   };
 
-  const handleStartYear = async () => {
+  const handleStartYear = async (paperId) => {
+    const usePaperId = paperId || "NEET_2025";
     setYear(2025);
     setLoadingQ(true);
     setLoadingError(null);
 
-    const { questions: remote, error } = await sbFetchQuestions("NEET_2025");
+    const { questions: remote, error } = await sbFetchQuestions(usePaperId);
 
     if (error) {
-      // Try localStorage cache first
-      const cached = localStorage.getItem("neet_questions_cache");
+      // Try localStorage cache as fallback
+      const cached = localStorage.getItem("neet_questions_cache_" + usePaperId);
       if (cached) {
         try {
           setQuestions(JSON.parse(cached));
@@ -3450,7 +3452,7 @@ export default function App() {
     }
 
     // Cache for offline resilience
-    try { localStorage.setItem("neet_questions_cache", JSON.stringify(remote)); } catch (_) {}
+    try { localStorage.setItem("neet_questions_cache_" + usePaperId, JSON.stringify(remote)); } catch (_) {}
 
     setQuestions(remote);
     setLoadingQ(false);
