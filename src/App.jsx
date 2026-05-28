@@ -586,6 +586,22 @@ function AdminScreen({ onSignOut }) {
   const [settingsMsg,    setSettingsMsg]    = useState(null);
   const [students,  setStudents]  = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [studentTab,      setStudentTab]      = useState("results"); // results | add
+  const [batches,         setBatches]         = useState([]);
+  const [batchLoading,    setBatchLoading]     = useState(false);
+  const [batchMsg,        setBatchMsg]         = useState(null);
+  const [selectedBatch,   setSelectedBatch]    = useState(null); // batch object being edited
+  const [batchForm,       setBatchForm]        = useState({ name:"", description:"" });
+  const [batchSettings,   setBatchSettings]    = useState({});
+  const [batchMembers,    setBatchMembers]     = useState([]);
+  const [batchMemberInput,setBatchMemberInput] = useState(""); // paste emails
+  const [batchMemberCsv,  setBatchMemberCsv]  = useState(null);
+  const [batchView,       setBatchView]        = useState("list"); // list | edit
+  const [stuCsvMsg,       setStuCsvMsg]       = useState(null);
+  const [stuCsvRows,      setStuCsvRows]      = useState(null);
+  const [stuCsvPreview,   setStuCsvPreview]   = useState([]);
+  const [stuCsvLoading,   setStuCsvLoading]   = useState(false);
+  const [stuCsvProgress,  setStuCsvProgress]  = useState("");
   const afileRef   = useRef(null);
   const csvFileRef = useRef(null);
 
@@ -874,6 +890,155 @@ function AdminScreen({ onSignOut }) {
     setImgBulkMsg({ type: done > 0 ? "success" : "error", text: done + " images uploaded." + (fail > 0 ? " " + fail + " failed (no matching Q number found)." : "") });
   };
 
+  // Load batches
+  const loadBatches = async () => {
+    setBatchLoading(true);
+    const { data } = await supabase.from("batches").select("*").order("created_at");
+    if (data) setBatches(data);
+    setBatchLoading(false);
+  };
+
+  // Load batch details (settings + members)
+  const loadBatchDetail = async (batch) => {
+    setSelectedBatch(batch);
+    setBatchView("edit");
+    setBatchMsg(null);
+    // Load settings
+    const { data: s } = await supabase.from("batch_settings").select("*").eq("batch_id", batch.id).single();
+    setBatchSettings(s || {
+      exam_enabled: "true", access_code: "", access_code_enabled: "false",
+      resume_code: "", exam_window_start: "", exam_window_end: "",
+      attempt_limit: "0", paper_id: "NEET_2025"
+    });
+    // Load members
+    const { data: m } = await supabase.from("batch_members").select("email").eq("batch_id", batch.id).order("email");
+    setBatchMembers(m || []);
+  };
+
+  // Create batch
+  const createBatch = async () => {
+    if (!batchForm.name.trim()) { setBatchMsg({ type:"error", text:"Batch name required." }); return; }
+    const { data, error } = await supabase.from("batches").insert([{ name: batchForm.name.trim(), description: batchForm.description.trim() }]).select().single();
+    if (error) { setBatchMsg({ type:"error", text: error.message }); return; }
+    // Create default settings for new batch
+    await supabase.from("batch_settings").insert([{ batch_id: data.id }]);
+    setBatchForm({ name:"", description:"" });
+    setBatchMsg({ type:"ok", text:"Batch created!" });
+    loadBatches();
+  };
+
+  // Delete batch
+  const deleteBatch = async (id) => {
+    if (!window.confirm("Delete this batch? Members will be removed but student accounts remain.")) return;
+    await supabase.from("batches").delete().eq("id", id);
+    if (selectedBatch?.id === id) { setSelectedBatch(null); setBatchView("list"); }
+    loadBatches();
+  };
+
+  // Save batch settings
+  const saveBatchSettings = async () => {
+    if (!selectedBatch) return;
+    const { error } = await supabase.from("batch_settings").upsert({ batch_id: selectedBatch.id, ...batchSettings, updated_at: new Date().toISOString() }, { onConflict: "batch_id" });
+    if (error) setBatchMsg({ type:"error", text: error.message });
+    else setBatchMsg({ type:"ok", text:"Settings saved!" });
+  };
+
+  // Add members from textarea (paste emails)
+  const addBatchMembers = async () => {
+    const emails = batchMemberInput.split(/[,\n\s]+/).map(e => e.trim().toLowerCase()).filter(e => e.includes("@"));
+    if (!emails.length) { setBatchMsg({ type:"error", text:"Enter at least one valid email." }); return; }
+    const rows = emails.map(email => ({ batch_id: selectedBatch.id, email }));
+    const { error } = await supabase.from("batch_members").upsert(rows, { onConflict: "batch_id,email" });
+    if (error) setBatchMsg({ type:"error", text: error.message });
+    else {
+      setBatchMsg({ type:"ok", text: emails.length + " member(s) added." });
+      setBatchMemberInput("");
+      loadBatchDetail(selectedBatch);
+    }
+  };
+
+  // Remove member from batch
+  const removeBatchMember = async (email) => {
+    await supabase.from("batch_members").delete().eq("batch_id", selectedBatch.id).eq("email", email);
+    loadBatchDetail(selectedBatch);
+  };
+
+  // Add members from CSV file
+  const handleBatchMemberCsv = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const emails = e.target.result.split(/[,\n\r\s]+/).map(x => x.trim().replace(/^"|"$/g,"").toLowerCase()).filter(x => x.includes("@"));
+      setBatchMemberInput(emails.join("\n"));
+      setBatchMsg({ type:"ok", text: emails.length + " emails loaded from CSV. Click Add Members." });
+    };
+    reader.readAsText(file);
+  };
+
+  useEffect(() => { if (tab === "batches") loadBatches(); }, [tab]);
+
+  // Parse student CSV: email, password, full_name
+  // Parse student CSV: email, password, full_name
+  const parseStudentCSV = (text) => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { rows: [], err: "Need header row + data rows." };
+    const header = lines[0].split(",").map(h => h.trim().toLowerCase());
+    if (!header.includes("email")) return { rows: [], err: "CSV must have an 'email' column." };
+    if (!header.includes("password")) return { rows: [], err: "CSV must have a 'password' column." };
+    const rows = [], errs = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+      const row  = {};
+      header.forEach((h, j) => { row[h] = cols[j] || ""; });
+      if (!row.email || !row.email.includes("@")) { errs.push("Row " + i + ": invalid email"); continue; }
+      if (!row.password || row.password.length < 6) { errs.push("Row " + i + ": password must be 6+ chars"); continue; }
+      rows.push({ email: row.email.toLowerCase(), password: row.password, full_name: row.full_name || row.name || "" });
+    }
+    return { rows, errs, err: null };
+  };
+
+  const handleStudentCSVFile = (file) => {
+    if (!file || !file.name.endsWith(".csv")) { setStuCsvMsg({ type: "error", text: "Upload a .csv file." }); return; }
+    setStuCsvLoading(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const { rows, errs, err } = parseStudentCSV(e.target.result);
+      setStuCsvLoading(false);
+      if (err) { setStuCsvMsg({ type: "error", text: err }); return; }
+      setStuCsvRows(rows);
+      setStuCsvPreview(rows.slice(0, 5));
+      setStuCsvMsg({ type: rows.length > 0 ? "success" : "error", text: rows.length + " students ready to create." + (errs?.length ? " Warnings: " + errs.slice(0, 3).join("; ") : "") });
+    };
+    reader.readAsText(file);
+  };
+
+  const handleStudentCSVUpload = async () => {
+    if (!stuCsvRows || !stuCsvRows.length) return;
+    setStuCsvLoading(true);
+    let done = 0, fail = 0, failDetails = [];
+    for (const student of stuCsvRows) {
+      setStuCsvProgress(done + fail + "/" + stuCsvRows.length);
+      try {
+        // Use Supabase admin signUp - creates account directly
+        const { data, error } = await supabase.auth.signUp({
+          email: student.email,
+          password: student.password,
+          options: { data: { full_name: student.full_name } }
+        });
+        if (error) { fail++; failDetails.push(student.email + ": " + error.message); }
+        else done++;
+      } catch (e) { fail++; failDetails.push(student.email + ": " + e.message); }
+    }
+    setStuCsvLoading(false);
+    setStuCsvProgress("");
+    setStuCsvRows(null);
+    setStuCsvPreview([]);
+    let txt = done + " students created successfully.";
+    if (fail > 0) txt += " " + fail + " failed.";
+    if (failDetails.length) txt += "\n" + failDetails.slice(0, 5).join("\n");
+    setStuCsvMsg({ type: done > 0 ? "success" : "error", text: txt });
+  };
+
   //  Styles 
   const mstyle = (m) => !m ? {} : {
     borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 14, whiteSpace: "pre-line",
@@ -896,7 +1061,7 @@ function AdminScreen({ onSignOut }) {
       <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions"],["settings","Exam Settings"],["students","Student Data"]].map(([t,l]) => (
+          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"]].map(([t,l]) => (
             <button key={t} onClick={() => setTab(t)} style={abtn(tab===t?"primary":"ghost")}>{l + (t==="list" ? " (" + questions.length + ")" : "")}</button>
           ))}
         </div>
@@ -1323,49 +1488,306 @@ function AdminScreen({ onSignOut }) {
         )}
 
         
-        {tab === "students" && (
+        {/*  BATCHES TAB  */}
+        {tab === "batches" && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ color: "#a5b4fc", fontWeight: 700 }}>{"Student Results (" + students.length + " attempts)"}</div>
-              <button onClick={loadStudents} style={abtn("ghost")}>Refresh</button>
-            </div>
-            {loadingStudents ? (
-              <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading...</div>
-            ) : students.length === 0 ? (
-              <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No exam attempts yet.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 8 }}>
-                  {[
-                    ["Total Attempts", students.length],
-                    ["Avg Score", Math.round(students.reduce((a,r) => a + r.score, 0) / students.length) + "/720"],
-                    ["Highest", Math.max(...students.map(r => r.score)) + "/720"],
-                    ["Pass Rate (50%+)", Math.round(students.filter(r => r.score >= 360).length / students.length * 100) + "%"],
-                  ].map(([l,v]) => (
-                    <div key={l} style={{ ...acard, padding: "12px", textAlign: "center" }}>
-                      <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "1.1rem" }}>{v}</div>
-                      <div style={{ color: "#64748b", fontSize: 11, marginTop: 3 }}>{l}</div>
+            {batchMsg && <div style={mstyle(batchMsg)}>{batchMsg.text}</div>}
+
+            {batchView === "list" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Create new batch */}
+                <div style={{ ...acard, padding: "18px 20px" }}>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12 }}>Create New Batch</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <label style={alabel}>Batch Name</label>
+                      <input value={batchForm.name} onChange={e => setBatchForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Batch A, Morning Batch" style={ainput} />
                     </div>
-                  ))}
+                    <div>
+                      <label style={alabel}>Description (optional)</label>
+                      <input value={batchForm.description} onChange={e => setBatchForm(p => ({ ...p, description: e.target.value }))} placeholder="e.g. 50 students, 10am slot" style={ainput} />
+                    </div>
+                  </div>
+                  <button onClick={createBatch} style={abtn("success")}>+ Create Batch</button>
                 </div>
-                {students.map((r, i) => {
-                  const pct = Math.round((r.score / 720) * 100);
-                  const date = new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-                  return (
-                    <div key={i} style={{ ...acard, display: "flex", alignItems: "center", gap: 14, padding: "12px 16px" }}>
-                      <div style={{ width: 44, height: 44, borderRadius: "50%", background: pct>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border: "2px solid "+(pct>=50?"#22c55e":"#ef4444"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: pct>=50?"#4ade80":"#f87171", fontSize: 12, flexShrink: 0 }}>{pct}%</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, color: "#818cf8", fontFamily: "monospace" }}>{r.user_id.slice(0,8) + "..."}</div>
-                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}</div>
+
+                {/* Batch list */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ color: "#a5b4fc", fontWeight: 700 }}>{"All Batches (" + batches.length + ")"}</div>
+                    <button onClick={loadBatches} style={abtn("ghost")}>Refresh</button>
+                  </div>
+                  {batchLoading ? <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading...</div>
+                  : batches.length === 0 ? <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No batches yet. Create one above.</div>
+                  : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {batches.map(b => (
+                        <div key={b.id} style={{ ...acard, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>B</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: "0.95rem" }}>{b.name}</div>
+                            {b.description && <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>{b.description}</div>}
+                            <div style={{ color: "#475569", fontSize: 11, marginTop: 3 }}>Created {new Date(b.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}</div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={() => loadBatchDetail(b)} style={abtn("primary")}>Manage</button>
+                            <button onClick={() => deleteBatch(b.id)} style={{ ...abtn("danger"), padding: "9px 12px" }}>Del</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {batchView === "edit" && selectedBatch && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <button onClick={() => { setBatchView("list"); setSelectedBatch(null); setBatchMsg(null); }} style={abtn("ghost")}>Back</button>
+                  <div>
+                    <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: "1.1rem" }}>{selectedBatch.name}</div>
+                    {selectedBatch.description && <div style={{ color: "#64748b", fontSize: 12 }}>{selectedBatch.description}</div>}
+                  </div>
+                </div>
+
+                {/* Members section */}
+                <div style={{ ...acard, padding: "18px 20px" }}>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12 }}>{"Members (" + batchMembers.length + ")"}</div>
+                  
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={alabel}>Add members - paste emails (comma or newline separated) or upload CSV</label>
+                    <textarea
+                      value={batchMemberInput}
+                      onChange={e => setBatchMemberInput(e.target.value)}
+                      placeholder={"student1@example.com\nstudent2@example.com\nstudent3@example.com"}
+                      style={{ ...ainput, minHeight: 80, resize: "vertical", lineHeight: 1.6, marginBottom: 8 }}
+                    />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={addBatchMembers} style={abtn("success")}>Add Members</button>
+                      <button onClick={() => { const i=document.createElement("input"); i.type="file"; i.accept=".csv"; i.onchange=e=>handleBatchMemberCsv(e.target.files[0]); i.click(); }} style={abtn("ghost")}>Upload CSV</button>
+                    </div>
+                  </div>
+
+                  {/* Member list */}
+                  {batchMembers.length > 0 ? (
+                    <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 5 }}>
+                      {batchMembers.map((m, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "7px 12px" }}>
+                          <span style={{ color: "#c7d2fe", fontSize: 13 }}>{m.email}</span>
+                          <button onClick={() => removeBatchMember(m.email)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>x</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: "center", color: "#475569", padding: 20, fontSize: 13 }}>No members yet. Add emails above.</div>
+                  )}
+                </div>
+
+                {/* Exam settings for this batch */}
+                <div style={{ ...acard, padding: "18px 20px" }}>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 4 }}>Exam Settings for this Batch</div>
+                  <div style={{ color: "#64748b", fontSize: 12, marginBottom: 16 }}>These override global settings for students in this batch.</div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {/* Exam enabled */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div><div style={{ color: "#e2e8f0", fontSize: 13 }}>Exam Enabled</div><div style={{ color: "#64748b", fontSize: 11 }}>Allow this batch to take the exam</div></div>
+                      <button onClick={() => setBatchSettings(p => ({ ...p, exam_enabled: p.exam_enabled === "false" ? "true" : "false" }))} style={{ ...abtn(batchSettings.exam_enabled !== "false" ? "success" : "ghost"), minWidth: 70 }}>{batchSettings.exam_enabled !== "false" ? "ON" : "OFF"}</button>
+                    </div>
+
+                    {/* Access code */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div><div style={{ color: "#e2e8f0", fontSize: 13 }}>Access Code Required</div></div>
+                      <button onClick={() => setBatchSettings(p => ({ ...p, access_code_enabled: p.access_code_enabled === "true" ? "false" : "true" }))} style={{ ...abtn(batchSettings.access_code_enabled === "true" ? "success" : "ghost"), minWidth: 70 }}>{batchSettings.access_code_enabled === "true" ? "ON" : "OFF"}</button>
+                    </div>
+                    {batchSettings.access_code_enabled === "true" && (
+                      <div>
+                        <label style={alabel}>Start Code</label>
+                        <input value={batchSettings.access_code || ""} onChange={e => setBatchSettings(p => ({ ...p, access_code: e.target.value }))} placeholder="Code to start exam" style={{ ...ainput, marginBottom: 8 }} />
                       </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 700, color: "#e2e8f0" }}>{r.score} / 720</div>
-                        <div style={{ fontSize: 11, color: "#64748b" }}>C:{r.correct} W:{r.wrong} U:{r.unattempted}</div>
+                    )}
+
+                    {/* Resume code */}
+                    <div>
+                      <label style={alabel}>Resume Code (tab-switch lock)</label>
+                      <input value={batchSettings.resume_code || ""} onChange={e => setBatchSettings(p => ({ ...p, resume_code: e.target.value }))} placeholder="Code to resume after tab switch" style={ainput} />
+                    </div>
+
+                    {/* Exam window */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={alabel}>Window Start</label>
+                        <input type="datetime-local" value={batchSettings.exam_window_start || ""} onChange={e => setBatchSettings(p => ({ ...p, exam_window_start: e.target.value }))} style={ainput} />
+                      </div>
+                      <div>
+                        <label style={alabel}>Window End</label>
+                        <input type="datetime-local" value={batchSettings.exam_window_end || ""} onChange={e => setBatchSettings(p => ({ ...p, exam_window_end: e.target.value }))} style={ainput} />
                       </div>
                     </div>
-                  );
-                })}
+
+                    {/* Attempt limit */}
+                    <div>
+                      <label style={alabel}>Max Attempts (0 = unlimited)</label>
+                      <input type="number" min="0" value={batchSettings.attempt_limit || "0"} onChange={e => setBatchSettings(p => ({ ...p, attempt_limit: e.target.value }))} style={{ ...ainput, maxWidth: 180 }} />
+                    </div>
+
+                    {/* Paper ID */}
+                    <div>
+                      <label style={alabel}>Paper ID</label>
+                      <input value={batchSettings.paper_id || "NEET_2025"} onChange={e => setBatchSettings(p => ({ ...p, paper_id: e.target.value }))} placeholder="e.g. NEET_2025, NEET_2024" style={{ ...ainput, maxWidth: 220 }} />
+                      <div style={{ color: "#475569", fontSize: 11, marginTop: 4 }}>Questions with this paper_id will be shown to this batch</div>
+                    </div>
+                  </div>
+
+                  <button onClick={saveBatchSettings} style={{ ...abtn("success"), marginTop: 16, padding: "12px 28px" }}>Save Batch Settings</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+                {tab === "students" && (
+          <div>
+            {/* Sub-tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+              <button onClick={() => setStudentTab("results")} style={abtn(studentTab === "results" ? "primary" : "ghost")}>Exam Results</button>
+              <button onClick={() => setStudentTab("add")}     style={abtn(studentTab === "add"     ? "primary" : "ghost")}>Add Students via CSV</button>
+            </div>
+
+            {/* RESULTS SUB-TAB */}
+            {studentTab === "results" && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700 }}>{"Student Results (" + students.length + " attempts)"}</div>
+                  <button onClick={loadStudents} style={abtn("ghost")}>Refresh</button>
+                </div>
+                {loadingStudents ? (
+                  <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading...</div>
+                ) : students.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No exam attempts yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 8 }}>
+                      {[
+                        ["Total Attempts", students.length],
+                        ["Avg Score", Math.round(students.reduce((a,r) => a + r.score, 0) / students.length) + "/720"],
+                        ["Highest", Math.max(...students.map(r => r.score)) + "/720"],
+                        ["Pass Rate (50%+)", Math.round(students.filter(r => r.score >= 360).length / students.length * 100) + "%"],
+                      ].map(([l,v]) => (
+                        <div key={l} style={{ ...acard, padding: "12px", textAlign: "center" }}>
+                          <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "1.1rem" }}>{v}</div>
+                          <div style={{ color: "#64748b", fontSize: 11, marginTop: 3 }}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {students.map((r, i) => {
+                      const pct  = Math.round((r.score / 720) * 100);
+                      const date = new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+                      return (
+                        <div key={i} style={{ ...acard, display: "flex", alignItems: "center", gap: 14, padding: "12px 16px" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: "50%", background: pct>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border: "2px solid "+(pct>=50?"#22c55e":"#ef4444"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: pct>=50?"#4ade80":"#f87171", fontSize: 12, flexShrink: 0 }}>{pct}%</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: "#818cf8", fontFamily: "monospace" }}>{r.user_id.slice(0,8) + "..."}</div>
+                            <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}</div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontWeight: 700, color: "#e2e8f0" }}>{r.score} / 720</div>
+                            <div style={{ fontSize: 11, color: "#64748b" }}>C:{r.correct} W:{r.wrong} U:{r.unattempted}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ADD STUDENTS SUB-TAB */}
+            {studentTab === "add" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                {stuCsvMsg && <div style={mstyle(stuCsvMsg)}>{stuCsvMsg.text}</div>}
+
+                {/* Format guide */}
+                <div style={{ ...acard, padding: "18px 20px" }}>
+                  <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 10 }}>CSV Format</div>
+                  <div style={{ background: "#070d1a", borderRadius: 8, padding: "10px 14px", fontFamily: "monospace", fontSize: 12, color: "#86efac", marginBottom: 12, overflowX: "auto" }}>
+                    email, password, full_name
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+                    {[
+                      ["email",     "Student email address (required)"],
+                      ["password",  "Login password, min 6 chars (required)"],
+                      ["full_name", "Student full name (optional)"],
+                    ].map(([k, v]) => (
+                      <div key={k} style={{ fontSize: 12 }}>
+                        <span style={{ color: "#fbbf24", fontFamily: "monospace" }}>{k}</span>
+                        <span style={{ color: "#64748b" }}> - {v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const s = "email,password,full_name\nstudent1@example.com,Pass@1234,Rahul Sharma\nstudent2@example.com,Pass@5678,Priya Singh\nstudent3@example.com,Pass@9012,Amit Patel\n";
+                      const b = new Blob([s], { type: "text/csv" });
+                      const u = URL.createObjectURL(b);
+                      const a = document.createElement("a");
+                      a.href = u; a.download = "sample_students.csv"; a.click();
+                      URL.revokeObjectURL(u);
+                    }}
+                    style={{ ...abtn("ghost"), fontSize: 12 }}>
+                    Download Sample CSV
+                  </button>
+                </div>
+
+                {/* Upload area */}
+                <div
+                  onClick={() => { const i = document.createElement("input"); i.type = "file"; i.accept = ".csv"; i.onchange = e => handleStudentCSVFile(e.target.files[0]); i.click(); }}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); handleStudentCSVFile(e.dataTransfer.files[0]); }}
+                  style={{ border: "2px dashed rgba(99,102,241,0.4)", borderRadius: 12, padding: 28, textAlign: "center", cursor: "pointer", background: "rgba(99,102,241,0.04)" }}>
+                  <div style={{ fontSize: 36, marginBottom: 8 }}>[ CSV ]</div>
+                  <div style={{ color: "#94a3b8", fontSize: 14 }}>Click or drag and drop student CSV here</div>
+                  <div style={{ color: "#475569", fontSize: 12, marginTop: 4 }}>Each row creates one student account</div>
+                </div>
+
+                {/* Preview */}
+                {stuCsvPreview.length > 0 && (
+                  <div style={{ ...acard, padding: "14px 16px" }}>
+                    <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 8 }}>Preview (first 5)</div>
+                    {stuCsvPreview.map((s, i) => (
+                      <div key={i} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 12px", marginBottom: 6, fontSize: 12, display: "flex", gap: 12, alignItems: "center" }}>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(99,102,241,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#818cf8", fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{i + 1}</div>
+                        <div>
+                          <div style={{ color: "#e2e8f0" }}>{s.full_name || "(no name)"}</div>
+                          <div style={{ color: "#64748b" }}>{s.email}</div>
+                        </div>
+                        <div style={{ marginLeft: "auto", color: "#475569", fontFamily: "monospace", fontSize: 11 }}>{"*".repeat(s.password.length)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Progress */}
+                {stuCsvProgress && (
+                  <div style={{ color: "#a5b4fc", fontSize: 13, textAlign: "center" }}>Creating accounts: {stuCsvProgress}</div>
+                )}
+
+                {/* Upload button */}
+                {stuCsvRows && stuCsvRows.length > 0 && (
+                  <button
+                    onClick={handleStudentCSVUpload}
+                    disabled={stuCsvLoading}
+                    style={{ ...abtn("success"), padding: "13px", fontSize: "1rem", opacity: stuCsvLoading ? 0.6 : 1 }}>
+                    {stuCsvLoading ? "Creating accounts..." : "Create " + stuCsvRows.length + " Student Accounts"}
+                  </button>
+                )}
+
+                <div style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: "12px 16px", fontSize: 12, color: "#94a3b8", lineHeight: 1.8 }}>
+                  <span style={{ color: "#fbbf24", fontWeight: 600 }}>Note: </span>
+                  Accounts are created using Supabase Auth. Students can log in immediately with the email and password you set. Share credentials with students separately.
+                </div>
               </div>
             )}
           </div>
@@ -1496,6 +1918,7 @@ function AuthScreen({ onAuth }) {
 function Dashboard({ user, onStart, onSignOut, settings }) {
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [batchConfig, setBatchConfig] = useState(null);
   const [tab,            setTab]            = useState("start"); // start | history | leaderboard
   const [accessCode,     setAccessCode]     = useState("");
   const [accessErr,      setAccessErr]      = useState("");
@@ -1503,16 +1926,19 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const [loadingLB,      setLoadingLB]      = useState(false);
 
   // Countdown to NEET exam date
-  const neetDate   = settings?.neet_exam_date ? new Date(settings.neet_exam_date) : new Date("2026-05-04");
+  // Effective settings = batch settings override global settings
+  const eff = batchConfig ? { ...settings, ...batchConfig } : settings;
+
+  const neetDate   = eff?.neet_exam_date ? new Date(eff.neet_exam_date) : new Date("2026-05-04");
   const daysLeft   = Math.max(0, Math.ceil((neetDate - new Date()) / (1000*60*60*24)));
-  const attemptLimit = parseInt(settings?.attempt_limit || "0");
+  const attemptLimit = parseInt(eff?.attempt_limit || "0");
   const attemptsUsed = history.length;
   const limitReached = attemptLimit > 0 && attemptsUsed >= attemptLimit;
 
   // Check if exam window is active (only block if window is configured)
   const isWindowBlocked = (() => {
-    const start = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
-    const end   = settings?.exam_window_end   ? new Date(settings.exam_window_end)   : null;
+    const start = eff?.exam_window_start ? new Date(eff.exam_window_start) : null;
+    const end   = eff?.exam_window_end   ? new Date(eff.exam_window_end)   : null;
     if (!start || !end || isNaN(start) || isNaN(end)) return false; // no window set = always open
     const now = new Date();
     return now < start || now > end; // blocked if outside window
@@ -1560,6 +1986,26 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
       const merged = remote.length > 0 ? remote : local;
       setHistory(merged);
       setLoadingHistory(false);
+
+      // Check if student is in a batch - apply batch settings
+      if (user.email && isSupabaseConfigured()) {
+        try {
+          const { data: membership } = await supabase
+            .from("batch_members")
+            .select("batch_id, batches(name)")
+            .eq("email", user.email.toLowerCase())
+            .limit(1)
+            .maybeSingle();
+          if (membership?.batch_id) {
+            const { data: bs } = await supabase
+              .from("batch_settings")
+              .select("*")
+              .eq("batch_id", membership.batch_id)
+              .maybeSingle();
+            if (bs) setBatchConfig({ ...bs, batch_name: membership.batches?.name || "Unknown" });
+          }
+        } catch (_) {}
+      }
     })();
   }, [user.id]);
 
@@ -1578,35 +2024,20 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   }, [tab]);
 
   const handleStart = () => {
-    // Check access code - strip all whitespace from both sides before comparing
-    if (settings?.access_code_enabled === "true" && settings?.access_code) {
+    // Check access code using effective (batch-aware) settings
+    if (eff?.access_code_enabled === "true" && eff?.access_code) {
       const entered = accessCode.replace(/\s/g, "");
-      const stored  = (settings.access_code || "").replace(/\s/g, "");
-      if (!entered) {
-        setAccessErr("Please enter the access code.");
-        return;
-      }
-      if (entered !== stored) {
-        setAccessErr("Invalid access code. Please try again.");
-        return;
-      }
+      const stored  = (eff.access_code || "").replace(/\s/g, "");
+      if (!entered) { setAccessErr("Please enter the access code."); return; }
+      if (entered !== stored) { setAccessErr("Invalid access code. Please try again."); return; }
     }
-    // Check exam window
-    if (settings?.exam_window_start && settings?.exam_window_end) {
-      const now = new Date();
-      const start = new Date(settings.exam_window_start);
-      const end   = new Date(settings.exam_window_end);
-      if (now < start || now > end) {
-        setAccessErr("Exam is not available right now. Scheduled: " + start.toLocaleString() + " to " + end.toLocaleString());
-        return;
-      }
+    if (eff?.exam_window_start && eff?.exam_window_end) {
+      const now = new Date(), start = new Date(eff.exam_window_start), end = new Date(eff.exam_window_end);
+      if (now < start || now > end) { setAccessErr("Exam not available now. Window: " + start.toLocaleString() + " to " + end.toLocaleString()); return; }
     }
-    if (settings?.exam_enabled === "false") {
-      setAccessErr("Exam access is currently disabled by the admin.");
-      return;
-    }
+    if (eff?.exam_enabled === "false") { setAccessErr("Exam access is currently disabled."); return; }
     setAccessErr("");
-    onStart();
+    onStart(eff?.paper_id || "NEET_2025");
   };
 
   const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Student";
@@ -1699,7 +2130,15 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
       <style>{`@keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }`}</style>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
-       
+
+        {batchConfig && (
+          <div style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 10, padding: "8px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#818cf8", flexShrink: 0 }} />
+            <span style={{ color: "#a5b4fc", fontSize: 13, fontWeight: 600 }}>Batch: {batchConfig.batch_name}</span>
+            <span style={{ color: "#475569", fontSize: 12, marginLeft: 4 }}>Custom exam settings active</span>
+          </div>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }} className="mob-grid1">
           {[
             { label: "Tests Taken", value: history.length, color: "#818cf8" },
