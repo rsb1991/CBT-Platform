@@ -1992,6 +1992,8 @@ function ExamScreen({ questions, year, onFinish, settings }) {
   const [restored,      setRestored]     = useState(!!saved);
   const [tabWarning,    setTabWarning]   = useState(false);
   const [tabSwitchCount,setTabSwitchCount] = useState(0);
+  const [lockInput,     setLockInput]     = useState("");
+  const [lockErr,       setLockErr]       = useState("");
   const [paused,        setPaused]       = useState(false);
   const [pauseCode,     setPauseCode]    = useState("");
   const [pauseErr,      setPauseErr]     = useState("");
@@ -2068,9 +2070,12 @@ function ExamScreen({ questions, year, onFinish, settings }) {
     });
   }, [answers, marked, bookmarks, webcamSnaps]);
 
-  // Timer
+  // Timer - pauses when tab switches or manually paused
   useEffect(() => {
-    if (paused) return;
+    if (paused || tabWarning) {
+      clearInterval(timerRef.current);
+      return;
+    }
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) { clearInterval(timerRef.current); doFinish(); return 0; }
@@ -2078,7 +2083,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [doFinish, paused]);
+  }, [doFinish, paused, tabWarning]);
 
   // Right-click + tab switch blocker
   useEffect(() => {
@@ -2088,12 +2093,32 @@ function ExamScreen({ questions, year, onFinish, settings }) {
           (e.ctrlKey && e.shiftKey && ["i","j","c"].includes(e.key.toLowerCase())) ||
           e.key === "F12" || (e.altKey && e.key === "Tab")) e.preventDefault();
     };
-    const handleVis = () => { if (document.hidden) { setTabWarning(true); setTabSwitchCount(c => c+1); }};
-    const handleBlur = () => { setTabWarning(true); setTabSwitchCount(c => c+1); };
+    const handleVis = () => {
+      if (document.hidden) {
+        setTabWarning(true);
+        setTabSwitchCount(c => c+1);
+        setLockInput("");
+        setLockErr("");
+      }
+    };
+    // blur only triggers if tab actually switches, not just clicking within the page
+    let blurTimer = null;
+    const handleBlur = () => {
+      blurTimer = setTimeout(() => {
+        if (document.hidden) {
+          setTabWarning(true);
+          setTabSwitchCount(c => c+1);
+          setLockInput("");
+          setLockErr("");
+        }
+      }, 300);
+    };
+    const handleFocus = () => { if (blurTimer) clearTimeout(blurTimer); };
     document.addEventListener("contextmenu", block);
     document.addEventListener("keydown", blockKeys);
     document.addEventListener("visibilitychange", handleVis);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
     document.body.style.userSelect = "none";
     document.body.style.webkitUserSelect = "none";
     return () => {
@@ -2101,6 +2126,8 @@ function ExamScreen({ questions, year, onFinish, settings }) {
       document.removeEventListener("keydown", blockKeys);
       document.removeEventListener("visibilitychange", handleVis);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+      if (blurTimer) clearTimeout(blurTimer);
       document.body.style.userSelect = "";
       document.body.style.webkitUserSelect = "";
     };
@@ -2199,8 +2226,61 @@ function ExamScreen({ questions, year, onFinish, settings }) {
           padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
           fontSize: 13, color: "#4ade80", flexShrink: 0,
         }}>
-          <span> Session restored  your answers and timer have been saved from your last visit.</span>
-          <button onClick={() => setRestored(false)} style={{ background: "none", border: "none", color: "#4ade80", cursor: "pointer", fontSize: 16, padding: "0 4px" }}></button>
+          <span>Session restored - your answers and timer have been saved from your last visit.</span>
+          <button onClick={() => setRestored(false)} style={{ background: "none", border: "none", color: "#4ade80", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>x</button>
+        </div>
+      )}
+
+      {/* TAB SWITCH LOCK SCREEN - covers entire exam, timer paused */}
+      {tabWarning && (
+        <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", fontFamily: "Georgia, serif" }}>
+          <div style={{ background: "#0f172a", border: "2px solid rgba(239,68,68,0.5)", borderRadius: 20, padding: "40px 36px", maxWidth: 440, width: "90%", textAlign: "center" }}>
+            {/* Warning icon */}
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(239,68,68,0.15)", border: "2px solid rgba(239,68,68,0.4)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 28 }}>!</div>
+            <h2 style={{ color: "#f87171", margin: "0 0 8px", fontSize: "1.4rem", fontWeight: 700 }}>Exam Paused</h2>
+            <p style={{ color: "#94a3b8", fontSize: 14, margin: "0 0 6px", lineHeight: 1.7 }}>
+              You switched tabs or left the exam window.
+            </p>
+            <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 16px", marginBottom: 24, display: "inline-block" }}>
+              <span style={{ color: "#f87171", fontSize: 13, fontWeight: 700 }}>Violations: {tabSwitchCount}</span>
+              <span style={{ color: "#64748b", fontSize: 12, marginLeft: 8 }}>| Timer paused</span>
+            </div>
+            <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 20px" }}>
+              Enter the exam access code to resume.
+            </p>
+            <input
+              type="password"
+              value={lockInput}
+              onChange={e => { setLockInput(e.target.value); setLockErr(""); }}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  if (lockInput === (settings?.access_code || "")) {
+                    setTabWarning(false); setLockInput(""); setLockErr("");
+                  } else {
+                    setLockErr("Incorrect code. Contact your invigilator.");
+                  }
+                }
+              }}
+              placeholder="Enter access code"
+              style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid " + (lockErr ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)"), borderRadius: 10, padding: "12px 16px", color: "#e2e8f0", fontSize: "1rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8, textAlign: "center", letterSpacing: 4 }}
+              autoFocus
+            />
+            {lockErr && <div style={{ color: "#f87171", fontSize: 13, marginBottom: 10 }}>{lockErr}</div>}
+            <button
+              onClick={() => {
+                if (lockInput === (settings?.access_code || "")) {
+                  setTabWarning(false); setLockInput(""); setLockErr("");
+                } else {
+                  setLockErr("Incorrect code. Contact your invigilator.");
+                }
+              }}
+              style={{ ...btn("primary"), width: "100%", padding: "13px", fontSize: "1rem", marginTop: 4 }}>
+              Resume Exam
+            </button>
+            <p style={{ color: "#374151", fontSize: 11, marginTop: 16, lineHeight: 1.6 }}>
+              This violation has been recorded. Repeated violations may result in disqualification.
+            </p>
+          </div>
         </div>
       )}
 
