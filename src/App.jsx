@@ -1620,9 +1620,7 @@ function AdminScreen({ onSignOut }) {
                   <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
                     <button onClick={() => setAddStudentRows(p => [...p, { email:"", password:"", name:"" }])}
                       style={{ ...abtn("ghost"), fontSize: 12, padding: "7px 14px" }}>+ Add Row</button>
-                    <button onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept=".csv"; inp.onchange=e=>{ const rd=new FileReader(); rd.onload=ev=>{ const rows=ev.target.result.split(/
-?
-/).slice(1).filter(l=>l.trim()).map(l=>{ const cols=(l+",,,").split(","); return { email:(cols[0]||"").trim(), password:(cols[1]||"").trim(), name:(cols[2]||"").trim() }; }).filter(r=>r.email); setAddStudentRows(rows.length?rows:[{email:"",password:"",name:""}]); setAddStudentMsg({type:"ok",text:rows.length+" rows loaded."}); }; rd.readAsText(e.target.files[0]); }; inp.click(); }}
+                    <button onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept=".csv"; inp.onchange=e=>{ const rd=new FileReader(); rd.onload=ev=>{ const text=ev.target.result; const rows=text.split("\n").slice(1).filter(l=>l.trim()).map(l=>{ const cols=(l.replace(/\r/g,"")+",,,").split(","); return { email:(cols[0]||"").trim(), password:(cols[1]||"").trim(), name:(cols[2]||"").trim() }; }).filter(r=>r.email.includes("@")); setAddStudentRows(rows.length?rows:[{email:"",password:"",name:""}]); setAddStudentMsg({type:"ok",text:rows.length+" rows loaded."}); }; rd.readAsText(e.target.files[0]); }; inp.click(); }}
                       style={{ ...abtn("ghost"), fontSize: 12, padding: "7px 14px" }}>Import CSV</button>
                     <button onClick={() => { const s="email,password,full_name\nstudent1@example.com,Pass@1234,Rahul Sharma\n"; const b=new Blob([s],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u;a.download="template.csv";a.click();URL.revokeObjectURL(u); }}
                       style={{ ...abtn("ghost"), fontSize: 12, padding: "7px 14px" }}>Download Template</button>
