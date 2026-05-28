@@ -610,7 +610,7 @@ function AdminScreen({ onSignOut }) {
   const csvFileRef = useRef(null);
 
   useEffect(() => {
-    if (tab === "list")     loadAll();
+    if (tab === "list")     loadAll(paperFilter);
     if (tab === "settings") loadSettings();
     if (tab === "students") loadStudents();
   }, [tab]);
@@ -624,7 +624,7 @@ function AdminScreen({ onSignOut }) {
     const { data, error } = await supabase.from("questions")
       .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,paper_id")
       .eq("paper_id", usePaper).order("subject").order("number");
-    if (!error) setQs(data || []);
+    if (!error) setQuestions(data || []);
     else setMsg({ type: "error", text: error.message });
     setLoading(false);
   };
@@ -1098,7 +1098,7 @@ function AdminScreen({ onSignOut }) {
       <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"]].map(([t,l]) => (
+          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"]].map(([t,l]) => (
             <button key={t} onClick={() => setTab(t)} style={abtn(tab===t?"primary":"ghost")}>{l + (t==="list" ? " (" + questions.length + ")" : "")}</button>
           ))}
         </div>
