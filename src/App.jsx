@@ -1570,9 +1570,15 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   }, [tab]);
 
   const handleStart = () => {
-    // Check access code
+    // Check access code - strip all whitespace from both sides before comparing
     if (settings?.access_code_enabled === "true" && settings?.access_code) {
-      if (accessCode.trim() !== settings.access_code.trim()) {
+      const entered = accessCode.replace(/\s/g, "");
+      const stored  = (settings.access_code || "").replace(/\s/g, "");
+      if (!entered) {
+        setAccessErr("Please enter the access code.");
+        return;
+      }
+      if (entered !== stored) {
         setAccessErr("Invalid access code. Please try again.");
         return;
       }
