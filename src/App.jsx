@@ -451,7 +451,7 @@ function LandingScreen({ onStudent, onAdmin }) {
           Mock Test Platform
         </h1>
         <p style={{ color: "#64748b", margin: "0 0 48px", fontSize: 15 }}>Select your role to continue</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="mob-grid1">
           <button onClick={onStudent} style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.35)", borderRadius: 16, padding: "32px 20px", cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}
             onMouseEnter={e => e.currentTarget.style.background = "rgba(99,102,241,0.25)"}
             onMouseLeave={e => e.currentTarget.style.background = "rgba(99,102,241,0.12)"}>
@@ -1529,7 +1529,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
                     : "rgba(100,116,139,0.12)",
           borderBottom: "1px solid " + (winStatus.phase === "open" ? "rgba(34,197,94,0.25)" : winStatus.phase === "upcoming" ? "rgba(99,102,241,0.25)" : "rgba(100,116,139,0.2)"),
           padding: "12px 24px",
-          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {/* Pulsing dot */}
@@ -1577,7 +1577,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
        
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 32 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }} className="mob-grid1">
           {[
             { label: "Tests Taken", value: history.length, color: "#818cf8" },
             { label: "Best Score", value: bestScore !== null ? `${bestScore}/720` : "", color: "#4ade80" },
@@ -1801,7 +1801,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
   };
 
   return (
-    <div style={{ width: 230, background: "#0a1124", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
+    <div style={{ width: 230, background: "#0a1124", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }} className="mob-palette">
 
       {/* Stats row */}
       <div style={{ padding: "10px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
@@ -1823,7 +1823,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
         ))}
       </div>
 
-      {/* Single scrollable grid — all subjects together */}
+      {/* Single scrollable grid  all subjects together */}
       <div style={{ flex:1, overflowY:"auto", padding:"8px" }}>
         {SUBJECTS.map(s => {
           const sqs = questions.filter(q => q.subject === s);
@@ -2911,11 +2911,42 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; }
-        ::-webkit-scrollbar { width: 6px; }
+        body { margin: 0; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
         input:-webkit-autofill { -webkit-box-shadow: 0 0 0 100px #1e293b inset !important; -webkit-text-fill-color: #e2e8f0 !important; }
+        /* Prevent zoom on input focus on iOS/Android */
+        input, select, textarea { font-size: 16px !important; }
+        /* Mobile responsive */
+        @media (max-width: 700px) {
+          .mob-col { flex-direction: column !important; }
+          .mob-full { width: 100% !important; max-width: 100% !important; }
+          .mob-hide { display: none !important; }
+          .mob-small { font-size: 11px !important; }
+          .mob-pad { padding: 12px !important; }
+          .mob-grid2 { grid-template-columns: 1fr 1fr !important; }
+          .mob-grid1 { grid-template-columns: 1fr !important; }
+          .mob-wrap { flex-wrap: wrap !important; }
+          .mob-scroll { overflow-x: auto !important; }
+        }
+        @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Mobile exam layout */
+        @media (max-width: 700px) {
+          .mob-col { flex-direction: column-reverse !important; }
+          .mob-palette { width: 100% !important; max-height: 200px !important; border-left: none !important; border-top: 1px solid rgba(255,255,255,0.08) !important; }
+          .mob-palette > div:first-child { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; padding: 8px !important; overflow-x: auto !important; }
+          .mob-pal-scroll { display: flex !important; flex-direction: row !important; overflow-x: auto !important; gap: 10px !important; flex: 1 !important; padding: 6px 8px !important; }
+          .mob-pal-section { min-width: 70px !important; }
+          .exam-timer { font-size: 0.9rem !important; padding: 4px 10px !important; }
+          .exam-submit { padding: 7px 12px !important; font-size: 11px !important; }
+          .exam-subj-tabs { display: none !important; }
+          .mob-action-row { flex-wrap: wrap !important; gap: 6px !important; }
+          .mob-action-row button { flex: 1 !important; min-width: 80px !important; padding: 10px 6px !important; font-size: 11px !important; }
+          .time-strip { font-size: 9px !important; }
+          .q-meta { font-size: 10px !important; }
+        }
       `}</style>
 
       {screen === SCREEN.LANDING     && <LandingScreen onStudent={() => setScreen(SCREEN.AUTH)} onAdmin={() => setScreen(SCREEN.ADMIN_AUTH)} />}
