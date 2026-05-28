@@ -1225,11 +1225,19 @@ function AdminScreen({ onSignOut }) {
 
                 {settings.access_code_enabled === "true" && (
                   <div>
-                    <label style={alabel}>Access Code</label>
+                    <label style={alabel}>Exam Start Code</label>
                     <input value={settings.access_code || ""} onChange={e => setSettings(p => ({ ...p, access_code: e.target.value }))}
-                      placeholder="Enter the code students must type" style={settingInput} />
+                      placeholder="Code required to begin the exam" style={settingInput} />
                   </div>
                 )}
+
+                {/* Resume code - always shown, separate from start code */}
+                <div>
+                  <div style={{ color: "#e2e8f0", fontSize: 14, marginBottom: 2 }}>Exam Resume Code</div>
+                  <div style={{ color: "#64748b", fontSize: 12, marginBottom: 8 }}>Required when student switches tabs during exam</div>
+                  <input value={settings.resume_code || ""} onChange={e => setSettings(p => ({ ...p, resume_code: e.target.value }))}
+                    placeholder="Enter a separate code for resuming after tab switch" style={settingInput} />
+                </div>
               </div>
             </div>
 
@@ -2252,7 +2260,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
               <span style={{ color: "#f59e0b", fontSize: 12, marginLeft: 8 }}>| Timer still running</span>
             </div>
             <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 20px" }}>
-              Enter the exam access code to resume.
+              Enter the <span style={{ color: "#fbbf24" }}>exam resume code</span> to continue.
             </p>
             <input
               type="password"
@@ -2260,21 +2268,25 @@ function ExamScreen({ questions, year, onFinish, settings }) {
               onChange={e => { setLockInput(e.target.value); setLockErr(""); }}
               onKeyDown={e => {
                 if (e.key === "Enter") {
-                  if (lockInput === (settings?.access_code || "")) {
+                  const entered = lockInput.replace(/\s/g, "");
+                  const stored  = (settings?.resume_code || settings?.access_code || "").replace(/\s/g, "");
+                  if (entered === stored) {
                     setTabWarning(false); setLockInput(""); setLockErr("");
                   } else {
                     setLockErr("Incorrect code. Contact your invigilator.");
                   }
                 }
               }}
-              placeholder="Enter access code"
+              placeholder="Enter resume code"
               style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid " + (lockErr ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)"), borderRadius: 10, padding: "12px 16px", color: "#e2e8f0", fontSize: "1rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8, textAlign: "center", letterSpacing: 4 }}
               autoFocus
             />
             {lockErr && <div style={{ color: "#f87171", fontSize: 13, marginBottom: 10 }}>{lockErr}</div>}
             <button
               onClick={() => {
-                if (lockInput === (settings?.access_code || "")) {
+                const entered = lockInput.replace(/\s/g, "");
+                const stored  = (settings?.resume_code || settings?.access_code || "").replace(/\s/g, "");
+                if (entered === stored) {
                   setTabWarning(false); setLockInput(""); setLockErr("");
                 } else {
                   setLockErr("Incorrect code. Contact your invigilator.");
