@@ -572,6 +572,7 @@ function AdminScreen({ onSignOut }) {
   const [imgInfo,   setImgInfo]   = useState(null);
   const [msg,       setMsg]       = useState(null);
   const [search,    setSearch]    = useState("");
+  const [paperFilter, setPaperFilter] = useState("NEET_2025");
   const [subFilter, setSubFilter] = useState("All");
   const [editId,    setEditId]    = useState(null);
   const [csvMsg,    setCsvMsg]    = useState(null);
@@ -617,15 +618,17 @@ function AdminScreen({ onSignOut }) {
   const ff = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   //  Load all questions 
-  const loadAll = async () => {
+  const loadAll = async (pid) => {
     setLoading(true);
+    const usePaper = pid || paperFilter || "NEET_2025";
     const { data, error } = await supabase.from("questions")
       .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,paper_id")
-      .eq("paper_id", "NEET_2025").order("subject").order("number");
-    if (!error) setQuestions(data || []);
+      .eq("paper_id", usePaper).order("subject").order("number");
+    if (!error) setQs(data || []);
     else setMsg({ type: "error", text: error.message });
     setLoading(false);
   };
+
 
   //  Load platform settings 
   const loadSettings = async () => {
@@ -726,8 +729,8 @@ function AdminScreen({ onSignOut }) {
 
   //  Delete ALL questions 
   const handleDeleteAll = async () => {
-    if (!window.confirm("Delete ALL questions? This cannot be undone.")) return;
-    const { error } = await supabase.from("questions").delete().eq("paper_id", "NEET_2025");
+    if (!window.confirm("Delete ALL questions for paper '" + paperFilter + "'? Cannot be undone.")) return;
+    const { error } = await supabase.from("questions").delete().eq("paper_id", paperFilter);
     if (error) setMsg({ type: "error", text: error.message });
     else { loadAll(); setMsg({ type: "success", text: "All questions deleted." }); }
   };
@@ -784,7 +787,7 @@ function AdminScreen({ onSignOut }) {
         solution_eq:   row.solution_eq   || "",
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
-        paper_id:      "NEET_2025",
+        paper_id:      row.paper_id || "NEET_2025",
       });
     }
     return { rows, errors, error: null };
@@ -1194,7 +1197,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ color: "#a5b4fc", fontWeight: 700, marginBottom: 12, fontSize: "0.95rem" }}>CSV Format Guide</div>
               <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 10px" }}>Your CSV file must have a header row with these exact column names:</p>
               <div style={{ background: "#070d1a", borderRadius: 8, padding: "12px 14px", fontFamily: "monospace", fontSize: 12, color: "#86efac", marginBottom: 12, overflowX: "auto" }}>
-                number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty
+                number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty,paper_id
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
@@ -1207,6 +1210,7 @@ function AdminScreen({ onSignOut }) {
                   ["solution_text", "Explanation of answer"],
                   ["chapter", "Topic name (optional)"],
                   ["difficulty", "easy / medium / hard (optional)"],
+                  ["paper_id", "Test ID e.g. NEET_2025 (optional, defaults to NEET_2025)"],
                 ].map(([k,v]) => (
                   <div key={k} style={{ fontSize: 12 }}>
                     <span style={{ color: "#fbbf24", fontFamily: "monospace" }}>{k}</span>
@@ -1219,10 +1223,10 @@ function AdminScreen({ onSignOut }) {
               <button
                 onClick={() => {
                   const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty\n" +
-                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy\n" +
-                    "2,Chemistry,The hybridization of carbon in diamond:,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium\n" +
-                    "3,Physics,SI unit of electric field intensity:,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy\n";
-                  const blob = new Blob([sample], { type: "text/csv" });
+                  const sample = "number,subject,question_text,equation,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty,paper_id\n" +
+                    "1,Physics,A ball is thrown upward at 20 m/s. Max height (g=10):,,10 m,20 m,30 m,40 m,1,h = u^2/2g = 400/20 = 20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy,NEET_2025\n" +
+                    "2,Chemistry,The hybridization of carbon in diamond:,,sp,sp2,sp3,sp3d,2,Diamond carbon forms 4 sigma bonds so sp3.,,Carbon,medium,NEET_2025\n" +
+                    "3,Physics,SI unit of electric field intensity:,,C/m,N/C,N.m,J/C2,1,E = F/q so unit is N/C.,,Electrostatics,easy,BATCH_B_TEST\n";
                   const url  = URL.createObjectURL(blob);
                   const a    = document.createElement("a");
                   a.href = url; a.download = "sample_questions.csv"; a.click();
@@ -1329,13 +1333,18 @@ function AdminScreen({ onSignOut }) {
         {tab === "list" && (
           <div>
             {msg && <div style={mstyle(msg)}>{msg.text}</div>}
-            <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ ...ainput, flex: 1, minWidth: 180 }} />
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ color: "#64748b", fontSize: 12, flexShrink: 0 }}>Paper ID:</span>
+              <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="e.g. NEET_2025" style={{ ...ainput, width: 160 }} />
+              <button onClick={() => loadAll(paperFilter)} style={abtn("primary")}>Load</button>
+              <span style={{ color: "#475569", fontSize: 11 }}>Tip: type paper_id and click Load to switch tests</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ ...ainput, flex: 1, minWidth: 160 }} />
               <select value={subFilter} onChange={e => setSubFilter(e.target.value)} style={{ ...ainput, width: 130, cursor: "pointer" }}>
                 <option value="All">All Subjects</option>
                 {SUBJECTS.map(s => <option key={s}>{s}</option>)}
               </select>
-              <button onClick={loadAll} style={abtn("ghost")}>Refresh</button>
               <button onClick={handleDeleteAll} style={abtn("danger")}>Delete All</button>
             </div>
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
