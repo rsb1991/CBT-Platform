@@ -1501,6 +1501,17 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const attemptsUsed = history.length;
   const limitReached = attemptLimit > 0 && attemptsUsed >= attemptLimit;
 
+  // Check if exam window is active (only block if window is configured)
+  const isWindowBlocked = (() => {
+    const start = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
+    const end   = settings?.exam_window_end   ? new Date(settings.exam_window_end)   : null;
+    if (!start || !end || isNaN(start) || isNaN(end)) return false; // no window set = always open
+    const now = new Date();
+    return now < start || now > end; // blocked if outside window
+  })();
+
+  const canStart = !limitReached && !isWindowBlocked;
+
   // Live exam window countdown - ticks every second
   const [windowTick, setWindowTick] = useState(0);
   useEffect(() => {
@@ -1742,9 +1753,9 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
               Do not refresh or close the browser during the test.
             </div>
 
-            <button onClick={handleStart} disabled={limitReached}
-              style={{ ...btn("success", { padding: "13px 0", fontSize: "1rem", width: "100%", borderRadius: 12 }), opacity: limitReached ? 0.5 : 1, cursor: limitReached ? "not-allowed" : "pointer" }}>
-              Begin Mock Test
+            <button onClick={handleStart} disabled={!canStart}
+              style={{ ...btn(canStart ? "success" : "ghost", { padding: "13px 0", fontSize: "1rem", width: "100%", borderRadius: 12 }), opacity: canStart ? 1 : 0.4, cursor: canStart ? "pointer" : "not-allowed" }}>
+              {isWindowBlocked ? (winStatus?.phase === "upcoming" ? "Exam Not Started Yet" : "Exam Window Closed") : "Begin Mock Test"}
             </button>
           </div>
         )}
