@@ -344,7 +344,7 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
   try {
     const { data, error } = await supabase
       .from("questions")
-      .select("id, number, subject, type, question_text, equation, diagram_url, diagram_data, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, paper_id")
+      .select("id, number, subject, type, question_text, equation, diagram_url, diagram_data, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, solution_diagram_data, paper_id")
       .eq("paper_id", paperId)
       .order("number", { ascending: true });
 
@@ -369,9 +369,10 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
       diagram_data:  q.diagram_data || "",
       options:       [q.option_a, q.option_b, q.option_c, q.option_d],
       correct:       q.correct,
-      solution_text: q.solution_text || q.solution || "",
-      solution_eq:   q.solution_eq || "",
-      year:          2025,
+      solution_text:         q.solution_text || q.solution || "",
+      solution_eq:           q.solution_eq || "",
+      solution_diagram_data: q.solution_diagram_data || "",
+      year:                  2025,
     }));
 
     return { questions, error: null, source: "supabase" };
@@ -560,7 +561,7 @@ const abtn = (v) => {
 const ainput = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", color: "#e2e8f0", fontSize: "0.92rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
 const alabel = { color: "#94a3b8", fontSize: 11, display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 };
 const acard  = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 };
-const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", correct: "0", solution_text: "", solution_eq: "" });
+const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "" });
 const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Botany: "#22c55e", Zoology: "#f43f5e" };
 
 // Helper mini-components for admin
@@ -636,7 +637,16 @@ function AdminScreen({ onSignOut }) {
   const [batchMembers,    setBatchMembers]     = useState([]);
   const [batchMemberInput,setBatchMemberInput] = useState(""); // paste emails
   const [batchMemberCsv,  setBatchMemberCsv]  = useState(null);
-  const [batchView,       setBatchView]        = useState("list"); // list | edit
+  const [batchView,       setBatchView]        = useState("list"); // list | edit | tests
+  const [batchTests,      setBatchTests]       = useState([]);
+  const [batchTestView,   setBatchTestView]    = useState("list"); // list | edit
+  const [selectedTest,    setSelectedTest]     = useState(null);
+  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" });
+  const [batchTestView,   setBatchTestView]    = useState("list"); // list | create | edit | report
+  const [testMsg,         setTestMsg]          = useState(null);
+  const [testLoading,     setTestLoading]      = useState(false);
+  const [testReports,     setTestReports]      = useState([]);
+  const [testReportLoading,setTestReportLoading] = useState(false);
   const [addStudentRows,  setAddStudentRows]   = useState([{ email:"", password:"", name:"" }]);
   const [addStudentMsg,   setAddStudentMsg]    = useState(null);
   const [addStudentLoading,setAddStudentLoading] = useState(false);
@@ -661,7 +671,7 @@ function AdminScreen({ onSignOut }) {
     setLoading(true);
     const usePaper = pid || paperFilter || "NEET_2025";
     const { data, error } = await supabase.from("questions")
-      .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,paper_id")
+      .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,solution_diagram_data,paper_id")
       .eq("paper_id", usePaper).order("subject").order("number");
     if (!error) setQuestions(data || []);
     else setMsg({ type: "error", text: error.message });
@@ -704,6 +714,9 @@ function AdminScreen({ onSignOut }) {
 
   //  Load students 
   const [reportFilter,    setReportFilter]    = useState({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date", paperId:"", nameSearch:"" });
+  const [studentReportEmail, setStudentReportEmail] = useState("");
+  const [studentReportData,  setStudentReportData]  = useState([]);
+  const [studentReportLoading, setStudentReportLoading] = useState(false);
   const [reportExpanded,  setReportExpanded]  = useState(null); // expanded row user_id+created_at
 
   const loadStudents = async () => {
@@ -762,7 +775,7 @@ function AdminScreen({ onSignOut }) {
       question_text: form.question_text, equation: form.equation,
       diagram_data: form.diagram_data, diagram_url: "",
       option_a: form.option_a, option_b: form.option_b, option_c: form.option_c, option_d: form.option_d,
-      correct: +form.correct, solution_text: form.solution_text, solution_eq: form.solution_eq, paper_id: "NEET_2025",
+      correct: +form.correct, solution_text: form.solution_text, solution_eq: form.solution_eq, solution_diagram_data: form.solution_diagram_data || "", paper_id: "NEET_2025",
     };
     const { error } = editId
       ? await supabase.from("questions").update(payload).eq("id", editId)
@@ -778,7 +791,7 @@ function AdminScreen({ onSignOut }) {
 
   //  Edit question 
   const handleEdit = (q) => {
-    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "" });
+    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "" });
     setImgInfo(q.diagram_data ? { kb: Math.round(q.diagram_data.length * 0.75 / 1024) } : null);
     setEditId(q.id); setTab("add");
   };
@@ -986,11 +999,101 @@ function AdminScreen({ onSignOut }) {
     if (fail > 0) msg += " " + fail + " failed: " + failMsgs.slice(0,3).join("; ");
     setAddStudentMsg({ type: done > 0 ? "ok" : "error", text: msg });
     if (done > 0) {
+      // Show downloadable credentials summary
+      const created = valid.slice(0, done);
+      const creds = "email,password,full_name\n" + created.map(s => s.email+","+s.password+","+(s.name||"")).join("\n");
+      const blob = new Blob([creds], { type:"text/csv" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = (selectedBatch?.name||"batch").replace(/\s+/g,"_")+"_credentials.csv"; a.click();
+      URL.revokeObjectURL(url);
       setAddStudentRows([{ email:"", password:"", name:"" }]);
       loadBatchDetail(selectedBatch);
     }
   };
 
+  // Load tests for selected batch
+  const loadBatchTests = async (batchId) => {
+    setTestLoading(true);
+    const { data } = await supabase.from("batch_tests")
+      .select("*")
+      .eq("batch_id", batchId)
+      .order("created_at", { ascending: false });
+    setBatchTests(data || []);
+    setTestLoading(false);
+  };
+
+  // Create test for batch
+  const createBatchTest = async () => {
+    if (!testForm.name.trim()) { setTestMsg({ type:"error", text:"Test name required." }); return; }
+    if (!selectedBatch) return;
+    const { error } = await supabase.from("batch_tests").insert([{
+      batch_id: selectedBatch.id, name: testForm.name.trim(),
+      description: testForm.description.trim(), paper_id: testForm.paper_id || "NEET_2025",
+      exam_window_start: testForm.exam_window_start, exam_window_end: testForm.exam_window_end,
+      attempt_limit: +testForm.attempt_limit || 1,
+      access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
+      resume_code: testForm.resume_code, status: testForm.status || "scheduled",
+      manual_release: testForm.manual_release || "false"
+    }]);
+    if (error) { setTestMsg({ type:"error", text: error.message }); return; }
+    setTestMsg({ type:"ok", text:"Test created!" });
+    setTestForm({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled" });
+    loadBatchTests(selectedBatch.id);
+  };
+
+  // Update test
+  const saveTest = async () => {
+    if (!selectedTest) return;
+    const { error } = await supabase.from("batch_tests").update({
+      name: testForm.name, description: testForm.description,
+      paper_id: testForm.paper_id, exam_window_start: testForm.exam_window_start,
+      exam_window_end: testForm.exam_window_end, attempt_limit: +testForm.attempt_limit || 1,
+      access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
+      resume_code: testForm.resume_code, status: testForm.status,
+      manual_release: testForm.manual_release || "false"
+    }).eq("id", selectedTest.id);
+    if (error) setTestMsg({ type:"error", text: error.message });
+    else { setTestMsg({ type:"ok", text:"Test updated!" }); loadBatchTests(selectedBatch.id); }
+  };
+
+  // Delete test
+  const deleteTest = async (id) => {
+    if (!window.confirm("Delete this test? All attempts linked to it will be unlinked.")) return;
+    await supabase.from("batch_tests").delete().eq("id", id);
+    loadBatchTests(selectedBatch.id);
+  };
+
+  // Load test reports (all student attempts for a specific test)
+  const loadTestReports = async (testId) => {
+    setTestReportLoading(true);
+    const { data } = await supabase.from("test_results")
+      .select("id, user_id, student_name, student_email, score, correct, wrong, unattempted, total, created_at, percentile, subject_times")
+      .eq("batch_test_id", testId)
+      .order("score", { ascending: false });
+    setTestReports(data || []);
+    setTestReportLoading(false);
+  };
+
+  // Download test report as CSV
+  const downloadTestReport = (testName, rows) => {
+    const header = "Rank,Name,Email,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Date";
+    const lines = rows.map((r, i) => {
+      const pct = Math.round((r.score/720)*100);
+      const d   = new Date(r.created_at).toLocaleDateString("en-IN");
+      const st  = r.subject_times || {};
+      return [i+1, (r.student_name||"").replace(/,/g," "), (r.student_email||""), r.score, pct+"%", r.correct, r.wrong, r.unattempted, r.percentile!=null?r.percentile+"%":"N/A", d].join(",");
+    });
+    const csv  = header + "\n" + lines.join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = testName.replace(/\s+/g,"_") + "_report.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Load batches
+  const loadBatches = async () => {
   // Load batches
   const loadBatches = async () => {
     setBatchLoading(true);
@@ -1255,8 +1358,11 @@ function AdminScreen({ onSignOut }) {
                 {form.diagram_data ? (
                   <div>
                     <img src={form.diagram_data} alt="preview" style={{ maxHeight: 200, maxWidth: "100%", objectFit: "contain", borderRadius: 8, display: "block", margin: "0 auto 8px" }} />
-                    <div style={{ color: "#4ade80", fontSize: 12, marginBottom: 6 }}>{"Image ready" + (imgInfo ? " - " + imgInfo.w + "x" + imgInfo.h + "px, " + imgInfo.kb + "KB" : "")}</div>
-                    <button onClick={e => { e.stopPropagation(); ff("diagram_data", ""); setImgInfo(null); }} style={{ ...abtn("danger"), padding: "5px 14px", fontSize: 12 }}>Remove</button>
+                    <div style={{ color: "#4ade80", fontSize: 12, marginBottom: 8 }}>{"Image loaded" + (imgInfo ? " - " + imgInfo.w + "x" + imgInfo.h + "px, " + imgInfo.kb + "KB" : "")}</div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button onClick={e => { e.stopPropagation(); afileRef.current && afileRef.current.click(); }} style={{ ...abtn("primary"), padding: "5px 14px", fontSize: 12 }}>Replace Image</button>
+                      <button onClick={e => { e.stopPropagation(); ff("diagram_data", ""); setImgInfo(null); }} style={{ ...abtn("danger"), padding: "5px 14px", fontSize: 12 }}>Remove</button>
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -1292,6 +1398,27 @@ function AdminScreen({ onSignOut }) {
             <div>
               <label style={alabel}>Solution Equation - LaTeX (optional)</label>
               <input value={form.solution_eq} onChange={e => ff("solution_eq", e.target.value)} placeholder="e.g. $KE = \\frac{1}{2}mv^2$" style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
+            </div>
+            <div>
+              <label style={alabel}>Solution Diagram Image (optional)</label>
+              <div
+                onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept="image/jpeg,image/jpg,image/png,image/webp"; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return; setMsg({type:"info",text:"Compressing..."}); try { const {b64,kb,w,h}=await compressToBase64(f); ff("solution_diagram_data",b64); setMsg({type:"success",text:"Solution image ready - "+w+"x"+h+"px, "+kb+"KB"}); } catch(ex){setMsg({type:"error",text:ex.message});} }; inp.click(); }}
+                onDragOver={e=>e.preventDefault()}
+                onDrop={async e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(!f) return; try { const {b64,kb,w,h}=await compressToBase64(f); ff("solution_diagram_data",b64); setMsg({type:"success",text:"Solution image ready - "+w+"x"+h+"px, "+kb+"KB"}); } catch(ex){setMsg({type:"error",text:ex.message});} }}
+                style={{ border:"2px dashed "+(form.solution_diagram_data?"rgba(99,102,241,0.5)":"rgba(99,102,241,0.2)"), borderRadius:8, padding:form.solution_diagram_data?8:14, textAlign:"center", cursor:"pointer", background:"rgba(99,102,241,0.03)", marginTop:4 }}>
+                {form.solution_diagram_data ? (
+                  <div>
+                    <img src={form.solution_diagram_data} alt="sol" style={{ maxHeight:120, maxWidth:"100%", objectFit:"contain", borderRadius:6, display:"block", margin:"0 auto 6px" }} />
+                    <div style={{ fontSize:11, color:"#4ade80", marginBottom:6 }}>Solution image ready</div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button onClick={e=>{ e.stopPropagation(); const inp=document.createElement("input"); inp.type="file"; inp.accept="image/jpeg,image/jpg,image/png,image/webp"; inp.onchange=async ev=>{ try { const {b64,kb,w,h}=await compressToBase64(ev.target.files[0]); ff("solution_diagram_data",b64); setMsg({type:"success",text:"Solution image replaced - "+w+"x"+h+"px, "+kb+"KB"}); } catch(ex){} }; inp.click(); }} style={{ ...abtn("primary"), padding:"4px 12px", fontSize:11 }}>Replace</button>
+                      <button onClick={e=>{ e.stopPropagation(); ff("solution_diagram_data",""); }} style={{ ...abtn("danger"), padding:"4px 12px", fontSize:11 }}>Remove</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ color:"#64748b", fontSize:12 }}>Click or drag JPG/PNG for solution diagram</div>
+                )}
+              </div>
             </div>
             <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
               <button onClick={handleSave} disabled={loading} style={{ ...abtn("success"), flex: 1, padding: "13px", fontSize: "1rem", opacity: loading ? 0.6 : 1 }}>
@@ -1688,7 +1815,8 @@ function AdminScreen({ onSignOut }) {
                             <div style={{ color: "#475569", fontSize: 11, marginTop: 3 }}>Created {new Date(b.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}</div>
                           </div>
                           <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={() => loadBatchDetail(b)} style={abtn("primary")}>Manage</button>
+                            <button onClick={() => { setSelectedBatch(b); setBatchView("tests"); loadBatchTests(b.id); setTestMsg(null); setBatchTestView("list"); }} style={abtn("success")}>Tests</button>
+                            <button onClick={() => loadBatchDetail(b)} style={abtn("primary")}>Members</button>
                             <button onClick={() => deleteBatch(b.id)} style={{ ...abtn("danger"), padding: "9px 12px" }}>Del</button>
                           </div>
                         </div>
@@ -1699,7 +1827,191 @@ function AdminScreen({ onSignOut }) {
               </div>
             )}
 
-            {batchView === "edit" && selectedBatch && (
+            {/*  TESTS VIEW (multiple tests per batch)  */}
+            {batchView === "tests" && selectedBatch && (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <button onClick={() => { setBatchView("list"); setSelectedBatch(null); setSelectedTest(null); setTestMsg(null); }} style={abtn("ghost")}>Back</button>
+                  <div>
+                    <div style={{ color:"#e2e8f0", fontWeight:700, fontSize:"1.1rem" }}>{selectedBatch.name} - Tests</div>
+                    <div style={{ color:"#64748b", fontSize:12 }}>Schedule multiple tests on different dates</div>
+                  </div>
+                </div>
+
+                {testMsg && <div style={mstyle(testMsg)}>{testMsg.text}</div>}
+
+                {/* TEST LIST */}
+                {batchTestView === "list" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                    <button onClick={() => { setSelectedTest(null); setTestForm({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" }); setBatchTestView("create"); }} style={{ ...abtn("success"), alignSelf:"flex-start" }}>+ Schedule New Test</button>
+
+                    {testLoading ? <div style={{ textAlign:"center", color:"#64748b", padding:30 }}>Loading...</div>
+                    : batchTests.length === 0 ? <div style={{ textAlign:"center", color:"#475569", padding:30 }}>No tests scheduled. Create one above.</div>
+                    : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                        {batchTests.map(t => {
+                          const now = new Date();
+                          const st  = t.exam_window_start ? new Date(t.exam_window_start) : null;
+                          const en  = t.exam_window_end   ? new Date(t.exam_window_end)   : null;
+                          let statusLabel = "Scheduled", statusColor = "#fbbf24";
+                          if (t.manual_release === "true") { statusLabel = "Released (manual)"; statusColor = "#4ade80"; }
+                          else if (st && en) {
+                            if (now < st) { statusLabel = "Upcoming"; statusColor = "#818cf8"; }
+                            else if (now >= st && now <= en) { statusLabel = "ACTIVE NOW"; statusColor = "#4ade80"; }
+                            else { statusLabel = "Completed"; statusColor = "#64748b"; }
+                          }
+                          return (
+                            <div key={t.id} style={{ ...acard, padding:"14px 18px" }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                                    <span style={{ color:"#e2e8f0", fontWeight:700 }}>{t.name}</span>
+                                    <span style={{ fontSize:10, color:statusColor, background:"rgba(255,255,255,0.06)", padding:"2px 8px", borderRadius:99, fontWeight:600 }}>{statusLabel}</span>
+                                  </div>
+                                  {t.description && <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>{t.description}</div>}
+                                  <div style={{ color:"#475569", fontSize:11, marginTop:4, display:"flex", gap:14, flexWrap:"wrap" }}>
+                                    <span>Paper: <span style={{ color:"#a5b4fc" }}>{t.paper_id}</span></span>
+                                    {st && <span>Start: {st.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
+                                    {en && <span>End: {en.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
+                                  </div>
+                                </div>
+                                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                                  <button onClick={() => { setSelectedTest(t); loadTestReports(t.id); setBatchTestView("report"); }} style={{ ...abtn("primary"), padding:"7px 12px", fontSize:12 }}>Report</button>
+                                  <button onClick={() => { setSelectedTest(t); setTestForm({ name:t.name, description:t.description||"", paper_id:t.paper_id, exam_window_start:t.exam_window_start||"", exam_window_end:t.exam_window_end||"", attempt_limit:String(t.attempt_limit||"1"), access_code:t.access_code||"", access_code_enabled:t.access_code_enabled||"false", resume_code:t.resume_code||"", status:t.status||"scheduled", manual_release:t.manual_release||"false" }); setBatchTestView("edit"); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Edit</button>
+                                  <button onClick={() => deleteTest(t.id)} style={{ ...abtn("danger"), padding:"7px 10px", fontSize:12 }}>Del</button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* CREATE / EDIT TEST FORM */}
+                {(batchTestView === "create" || batchTestView === "edit") && (
+                  <div style={{ ...acard, padding:"20px 22px", display:"flex", flexDirection:"column", gap:14 }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                      <div style={{ color:"#a5b4fc", fontWeight:700 }}>{batchTestView === "edit" ? "Edit Test" : "Schedule New Test"}</div>
+                      <button onClick={() => { setBatchTestView("list"); setSelectedTest(null); }} style={{ ...abtn("ghost"), fontSize:12, padding:"5px 12px" }}>Cancel</button>
+                    </div>
+
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                      <div>
+                        <label style={alabel}>Test Name</label>
+                        <input value={testForm.name} onChange={e=>setTestForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Weekly Test 1, Full Mock 3" style={ainput} />
+                      </div>
+                      <div>
+                        <label style={alabel}>Paper ID (question set)</label>
+                        <input value={testForm.paper_id} onChange={e=>setTestForm(p=>({...p,paper_id:e.target.value}))} placeholder="e.g. BATCH_A_T1" style={ainput} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={alabel}>Description (optional)</label>
+                      <input value={testForm.description} onChange={e=>setTestForm(p=>({...p,description:e.target.value}))} placeholder="e.g. Covers Mechanics and Thermodynamics" style={ainput} />
+                    </div>
+
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                      <div>
+                        <label style={alabel}>Test Date & Start Time</label>
+                        <input type="datetime-local" value={testForm.exam_window_start} onChange={e=>setTestForm(p=>({...p,exam_window_start:e.target.value}))} style={ainput} />
+                      </div>
+                      <div>
+                        <label style={alabel}>End Time</label>
+                        <input type="datetime-local" value={testForm.exam_window_end} onChange={e=>setTestForm(p=>({...p,exam_window_end:e.target.value}))} style={ainput} />
+                      </div>
+                    </div>
+
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                      <div>
+                        <label style={alabel}>Max Attempts</label>
+                        <input type="number" min="1" value={testForm.attempt_limit} onChange={e=>setTestForm(p=>({...p,attempt_limit:e.target.value}))} style={ainput} />
+                      </div>
+                      <div>
+                        <label style={alabel}>Resume Code (tab-switch)</label>
+                        <input value={testForm.resume_code} onChange={e=>setTestForm(p=>({...p,resume_code:e.target.value}))} placeholder="Code to resume" style={ainput} />
+                      </div>
+                    </div>
+
+                    {/* Access code toggle */}
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                      <div style={{ color:"#e2e8f0", fontSize:13 }}>Require Access Code to Start</div>
+                      <button onClick={()=>setTestForm(p=>({...p,access_code_enabled:p.access_code_enabled==="true"?"false":"true"}))} style={{ ...abtn(testForm.access_code_enabled==="true"?"success":"ghost"), minWidth:70 }}>{testForm.access_code_enabled==="true"?"ON":"OFF"}</button>
+                    </div>
+                    {testForm.access_code_enabled === "true" && (
+                      <div>
+                        <label style={alabel}>Start Access Code</label>
+                        <input value={testForm.access_code} onChange={e=>setTestForm(p=>({...p,access_code:e.target.value}))} placeholder="Code to begin test" style={ainput} />
+                      </div>
+                    )}
+
+                    {/* Manual release toggle */}
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(34,197,94,0.06)", borderRadius:8, padding:"10px 14px" }}>
+                      <div>
+                        <div style={{ color:"#e2e8f0", fontSize:13 }}>Release Now (manual override)</div>
+                        <div style={{ color:"#64748b", fontSize:11 }}>Force-show this test to students regardless of date</div>
+                      </div>
+                      <button onClick={()=>setTestForm(p=>({...p,manual_release:p.manual_release==="true"?"false":"true"}))} style={{ ...abtn(testForm.manual_release==="true"?"success":"ghost"), minWidth:70 }}>{testForm.manual_release==="true"?"ON":"OFF"}</button>
+                    </div>
+
+                    <button onClick={batchTestView === "edit" ? saveTest : createBatchTest} style={{ ...abtn("success"), padding:"12px", fontSize:"1rem" }}>
+                      {batchTestView === "edit" ? "Save Changes" : "Schedule Test"}
+                    </button>
+                  </div>
+                )}
+
+                {/* TEST REPORT (per-test rankings) */}
+                {batchTestView === "report" && selectedTest && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                      <div>
+                        <div style={{ color:"#a5b4fc", fontWeight:700 }}>{selectedTest.name} - Report</div>
+                        <div style={{ color:"#64748b", fontSize:12 }}>{testReports.length} students attempted</div>
+                      </div>
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button onClick={() => setBatchTestView("list")} style={abtn("ghost")}>Back to Tests</button>
+                        {testReports.length > 0 && <button onClick={() => downloadTestReport(selectedTest.name, testReports)} style={{ ...abtn("success"), fontSize:12, padding:"8px 16px" }}>Download CSV</button>}
+                      </div>
+                    </div>
+
+                    {testReportLoading ? <div style={{ textAlign:"center", color:"#64748b", padding:30 }}>Loading...</div>
+                    : testReports.length === 0 ? <div style={{ textAlign:"center", color:"#475569", padding:30 }}>No attempts yet for this test.</div>
+                    : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"50px 1fr 90px 70px 70px 70px", gap:8, padding:"8px 14px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5 }}>
+                          <div>Rank</div><div>Student</div><div>Score</div>
+                          <div style={{ color:"#4ade80" }}>Correct</div>
+                          <div style={{ color:"#f87171" }}>Wrong</div>
+                          <div>Skip</div>
+                        </div>
+                        {testReports.map((r, i) => {
+                          const pct = Math.round((r.score/720)*100);
+                          return (
+                            <div key={r.id} style={{ display:"grid", gridTemplateColumns:"50px 1fr 90px 70px 70px 70px", gap:8, padding:"10px 14px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                                <span style={{ color:i<3?"#fbbf24":"#475569", fontWeight:700, fontSize:14 }}>{i+1}</span>
+                              </div>
+                              <div>
+                                <div style={{ color:"#e2e8f0", fontSize:13, fontWeight:600 }}>{r.student_name || r.student_email?.split("@")[0] || "Student"}</div>
+                                <div style={{ color:"#475569", fontSize:10 }}>{r.student_email}</div>
+                              </div>
+                              <div style={{ fontWeight:700, color:pct>=50?"#4ade80":"#f87171" }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/720</span></div>
+                              <div style={{ color:"#4ade80", fontWeight:600 }}>{r.correct}</div>
+                              <div style={{ color:"#f87171", fontWeight:600 }}>{r.wrong}</div>
+                              <div style={{ color:"#64748b" }}>{r.unattempted}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+                        {batchView === "edit" && selectedBatch && (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1851,9 +2163,10 @@ function AdminScreen({ onSignOut }) {
           <div>
             {/* Sub-tabs */}
             <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap:"wrap" }}>
-              <button onClick={() => setStudentTab("results")} style={abtn(studentTab === "results" ? "primary" : "ghost")}>Exam Results</button>
-              <button onClick={() => setStudentTab("manage")}  style={abtn(studentTab === "manage"  ? "primary" : "ghost")}>Manage Students</button>
-              <button onClick={() => setStudentTab("add")}     style={abtn(studentTab === "add"     ? "primary" : "ghost")}>Add Students via CSV</button>
+              <button onClick={() => setStudentTab("results")}     style={abtn(studentTab === "results"     ? "primary" : "ghost")}>Exam Results</button>
+              <button onClick={() => setStudentTab("studentcard")} style={abtn(studentTab === "studentcard" ? "primary" : "ghost")}>Student Report Card</button>
+              <button onClick={() => setStudentTab("manage")}      style={abtn(studentTab === "manage"      ? "primary" : "ghost")}>Manage Students</button>
+              <button onClick={() => setStudentTab("add")}         style={abtn(studentTab === "add"         ? "primary" : "ghost")}>Add Students via CSV</button>
             </div>
 
             {/* RESULTS SUB-TAB */}
@@ -2064,7 +2377,12 @@ function AdminScreen({ onSignOut }) {
                                     style={{ ...abtn("ghost"), fontSize: 11, padding: "6px 12px" }}>
                                     Download Row
                                   </button>
-                                  <div style={{ fontSize: 10, color: "#374151", textAlign: "center" }}>User: {r.user_id.slice(0,8)}</div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setStudentReportEmail(r.student_email || r.user_id); setStudentTab("studentcard"); }}
+                                    style={{ ...abtn("primary"), fontSize: 11, padding: "6px 12px" }}>
+                                    All Tests
+                                  </button>
+                                  <div style={{ fontSize: 10, color: "#374151", textAlign: "center" }}>{r.student_name || r.user_id.slice(0,8)}</div>
                                 </div>
                               </div>
                             )}
@@ -2144,7 +2462,82 @@ function AdminScreen({ onSignOut }) {
           </div>
         )}
 
-        {/* ADD STUDENTS SUB-TAB */}
+            {/* STUDENT REPORT CARD SUB-TAB */}
+            {studentTab === "studentcard" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Student Report Card</div>
+                  <div style={{ color:"#64748b", fontSize:12 }}>All tests by one student</div>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input value={studentReportEmail} onChange={e=>setStudentReportEmail(e.target.value)}
+                    placeholder="Enter student email or name, then press Enter"
+                    style={{ ...ainput, flex:1 }}
+                    onKeyDown={async e => { if (e.key !== "Enter") return; setStudentReportLoading(true); const q=studentReportEmail.trim(); const { data } = await supabase.from("test_results").select("id,student_name,student_email,test_name,paper_id,score,correct,wrong,unattempted,subject_times,created_at,batch_test_id,percentile").or("student_email.ilike.%"+q+"%,student_name.ilike.%"+q+"%").order("created_at",{ascending:true}); setStudentReportData(data||[]); setStudentReportLoading(false); }} />
+                  <button onClick={async()=>{ setStudentReportLoading(true); const q=studentReportEmail.trim(); const {data}=await supabase.from("test_results").select("id,student_name,student_email,test_name,paper_id,score,correct,wrong,unattempted,subject_times,created_at,batch_test_id,percentile").or("student_email.ilike.%"+q+"%,student_name.ilike.%"+q+"%").order("created_at",{ascending:true}); setStudentReportData(data||[]); setStudentReportLoading(false); }} style={abtn("primary")}>Search</button>
+                  {studentReportData.length > 0 && <button onClick={()=>downloadReportsCSV(studentReportData)} style={{ ...abtn("success"), fontSize:12 }}>CSV</button>}
+                </div>
+
+                {studentReportLoading ? <div style={{ textAlign:"center", color:"#64748b", padding:30 }}>Loading...</div>
+                : studentReportData.length === 0 ? <div style={{ color:"#475569", fontSize:13, textAlign:"center", padding:20 }}>Search by email or name and press Enter or click Search.</div>
+                : (() => {
+                  const name  = studentReportData[0]?.student_name || studentReportData[0]?.student_email || "Student";
+                  const avgSc = Math.round(studentReportData.reduce((a,r)=>a+r.score,0)/studentReportData.length);
+                  const best  = Math.max(...studentReportData.map(r=>r.score));
+                  const trend = studentReportData.length > 1
+                    ? (studentReportData[studentReportData.length-1].score > studentReportData[0].score ? "Improving" : "Declining") : "Single test";
+                  const trendCol = trend==="Improving"?"#4ade80":trend==="Declining"?"#f87171":"#64748b";
+                  return (
+                    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                      <div style={{ ...acard, padding:"14px 18px" }}>
+                        <div style={{ color:"#e2e8f0", fontWeight:700, marginBottom:10 }}>{name}</div>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+                          {[["Tests",studentReportData.length,"#a5b4fc"],["Best",best+"/720","#4ade80"],["Avg",avgSc+"/720","#fbbf24"],["Trend",trend,trendCol]].map(([l,v,c])=>(
+                            <div key={l} style={{ background:"rgba(255,255,255,0.03)", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
+                              <div style={{ color:c, fontWeight:700 }}>{v}</div>
+                              <div style={{ color:"#64748b", fontSize:10, marginTop:2 }}>{l}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {studentReportData.length > 1 && (
+                        <div style={{ ...acard, padding:"14px 18px" }}>
+                          <div style={{ color:"#a5b4fc", fontSize:11, fontWeight:600, marginBottom:8, textTransform:"uppercase" }}>Score Trend</div>
+                          <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:70 }}>
+                            {studentReportData.map((r,i)=>{ const h=Math.max(4,Math.round((r.score/720)*100)); return (
+                              <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                                <div style={{ fontSize:8, color:"#64748b" }}>{r.score}</div>
+                                <div style={{ width:"100%", background:h>=50?"#6366f1":"#ef4444", borderRadius:"2px 2px 0 0", height:h*0.65+"%" }} />
+                                <div style={{ fontSize:7, color:"#475569", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:36 }}>{r.test_name||"T"+(i+1)}</div>
+                              </div>
+                            );})}
+                          </div>
+                        </div>
+                      )}
+                      {studentReportData.map((r,i)=>{ const pct=Math.round((r.score/720)*100); const d=new Date(r.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"}); const st=r.subject_times||{}; return (
+                        <div key={r.id} style={{ ...acard, padding:"12px 16px", display:"flex", alignItems:"center", gap:12 }}>
+                          <div style={{ width:36, height:36, borderRadius:"50%", background:pct>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border:"2px solid "+(pct>=50?"#22c55e":"#ef4444"), display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, color:pct>=50?"#4ade80":"#f87171", fontSize:11, flexShrink:0 }}>{pct}%</div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{r.test_name||"Test "+(i+1)}</div>
+                            <div style={{ color:"#475569", fontSize:11 }}>{d} | {r.paper_id}</div>
+                            <div style={{ display:"flex", gap:8, fontSize:10, color:"#64748b", marginTop:2 }}>
+                              {["Physics","Chemistry","Botany","Zoology"].map(s=><span key={s}>{s.slice(0,3)}: {Math.floor((st[s]||0)/60)}m</span>)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign:"right", flexShrink:0 }}>
+                            <div style={{ color:"#e2e8f0", fontWeight:700 }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/720</span></div>
+                            <div style={{ fontSize:11 }}><span style={{ color:"#4ade80" }}>{r.correct}C</span> <span style={{ color:"#f87171" }}>{r.wrong}W</span> <span style={{ color:"#94a3b8" }}>{r.unattempted}S</span></div>
+                            {r.percentile!=null && <div style={{ fontSize:10, color:"#818cf8" }}>{r.percentile}th %ile</div>}
+                          </div>
+                        </div>
+                      );})}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+                {/* ADD STUDENTS SUB-TAB */}
             {studentTab === "add" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                 {stuCsvMsg && <div style={mstyle(stuCsvMsg)}>{stuCsvMsg.text}</div>}
@@ -2359,6 +2752,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [batchConfig, setBatchConfig] = useState(null);
+  const [nextTest,    setNextTest]    = useState(null); // the next scheduled batch test
   const [tab,            setTab]            = useState("start"); // start | history | leaderboard
   const [accessCode,     setAccessCode]     = useState("");
   const [accessErr,      setAccessErr]      = useState("");
@@ -2366,13 +2760,18 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const [loadingLB,      setLoadingLB]      = useState(false);
 
   // Countdown to NEET exam date
-  // Effective settings = batch settings override global settings
-  const eff = batchConfig ? { ...settings, ...batchConfig } : settings;
+  // Effective settings: next-test settings override batch settings override global
+  const eff = nextTest
+    ? { ...settings, ...batchConfig, ...nextTest, paper_id: nextTest.paper_id, attempt_limit: String(nextTest.attempt_limit||"1") }
+    : batchConfig ? { ...settings, ...batchConfig } : settings;
 
   const neetDate   = eff?.neet_exam_date ? new Date(eff.neet_exam_date) : new Date("2026-05-04");
   const daysLeft   = Math.max(0, Math.ceil((neetDate - new Date()) / (1000*60*60*24)));
   const attemptLimit = parseInt(eff?.attempt_limit || "0");
-  const attemptsUsed = history.length;
+  // Count attempts for current test only (if in a batch test context), else count all
+  const attemptsUsed = nextTest
+    ? history.filter(r => r.batch_test_id === nextTest.id).length
+    : history.length;
   const limitReached = attemptLimit > 0 && attemptsUsed >= attemptLimit;
 
   // Check if exam window is active (only block if window is configured)
@@ -2443,6 +2842,29 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
               .eq("batch_id", membership.batch_id)
               .maybeSingle();
             if (bs) setBatchConfig({ ...bs, batch_name: membership.batches?.name || "Unknown" });
+
+            // Load scheduled tests for this batch and find the next visible one
+            const { data: tests } = await supabase
+              .from("batch_tests")
+              .select("*")
+              .eq("batch_id", membership.batch_id)
+              .order("exam_window_start", { ascending: true });
+            if (tests && tests.length) {
+              const now = new Date();
+              // A test is visible if: manually released, OR currently in window, OR upcoming within 7 days
+              const visible = tests.filter(t => {
+                if (t.manual_release === "true") return true;
+                const st = t.exam_window_start ? new Date(t.exam_window_start) : null;
+                const en = t.exam_window_end   ? new Date(t.exam_window_end)   : null;
+                if (!st) return false;
+                if (en && now > en) return false; // completed - hide
+                const daysUntil = (st - now) / (1000*60*60*24);
+                return daysUntil <= 7; // show if within a week or active
+              });
+              // Pick the soonest one (active first, then upcoming)
+              visible.sort((a,b) => new Date(a.exam_window_start||0) - new Date(b.exam_window_start||0));
+              if (visible.length) setNextTest({ ...visible[0], batch_id: membership.batch_id, batch_name: membership.batches?.name });
+            }
           }
         } catch (_) {}
       }
@@ -2454,10 +2876,13 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
     if (settings?.leaderboard_enabled === "false") return;
     setLoadingLB(true);
     (async () => {
-      const { data } = await supabase.from("test_results")
-        .select("user_id, score, created_at")
+      let query = supabase.from("test_results")
+        .select("user_id, student_name, student_email, score, test_name, created_at")
         .order("score", { ascending: false })
         .limit(50);
+      // Filter to current test if in batch test context
+      if (nextTest?.id) query = query.eq("batch_test_id", nextTest.id);
+      const { data } = await query;
       if (data) setLeaderboard(data);
       setLoadingLB(false);
     })();
@@ -2477,7 +2902,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
     }
     if (eff?.exam_enabled === "false") { setAccessErr("Exam access is currently disabled."); return; }
     setAccessErr("");
-    onStart(eff?.paper_id || "NEET_2025");
+    onStart(eff?.paper_id || "NEET_2025", nextTest ? { batch_test_id: nextTest.id, batch_id: nextTest.batch_id, test_name: nextTest.name } : null);
   };
 
   const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Student";
@@ -2572,12 +2997,53 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
 
         {batchConfig && (
-          <div style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 10, padding: "8px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 10, padding: "8px 16px", marginBottom: nextTest ? 8 : 16, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#818cf8", flexShrink: 0 }} />
             <span style={{ color: "#a5b4fc", fontSize: 13, fontWeight: 600 }}>Batch: {batchConfig.batch_name}</span>
-            <span style={{ color: "#475569", fontSize: 12, marginLeft: 4 }}>Custom exam settings active</span>
+            <span style={{ color: "#475569", fontSize: 12, marginLeft: 4 }}>
+              {nextTest ? nextTest.name : "Custom exam settings active"}
+            </span>
           </div>
         )}
+
+        {/* NEXT TEST CARD - shown when student is in a batch with a scheduled test */}
+        {nextTest && (() => {
+          const now = new Date();
+          const st  = nextTest.exam_window_start ? new Date(nextTest.exam_window_start) : null;
+          const en  = nextTest.exam_window_end   ? new Date(nextTest.exam_window_end)   : null;
+          const isActive = nextTest.manual_release === "true" || (st && en && now >= st && now <= en);
+          const isUpcoming = st && now < st;
+          const msLeft = st ? st - now : 0;
+          const daysLeft = Math.floor(msLeft / (1000*60*60*24));
+          const hrsLeft  = Math.floor((msLeft % (1000*60*60*24)) / (1000*60*60));
+          const minLeft  = Math.floor((msLeft % (1000*60*60)) / (1000*60));
+          return (
+            <div style={{ background: isActive ? "rgba(34,197,94,0.06)" : "rgba(99,102,241,0.06)", border: "1px solid " + (isActive ? "rgba(34,197,94,0.25)" : "rgba(99,102,241,0.2)"), borderRadius: 14, padding: "16px 20px", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: isActive ? "#22c55e" : "#818cf8", animation: isActive ? "pulse 2s infinite" : "none" }} />
+                    <span style={{ color: isActive ? "#4ade80" : "#a5b4fc", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      {isActive ? "Test Active Now" : "Next Scheduled Test"}
+                    </span>
+                  </div>
+                  <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: "1.05rem", marginBottom: 4 }}>{nextTest.name}</div>
+                  {nextTest.description && <div style={{ color: "#64748b", fontSize: 12, marginBottom: 6 }}>{nextTest.description}</div>}
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
+                    {st && <span style={{ color: "#94a3b8" }}>Starts: {st.toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}</span>}
+                    {en && <span style={{ color: "#94a3b8" }}>Ends: {en.toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}</span>}
+                    <span style={{ color: "#64748b" }}>Paper: {nextTest.paper_id}</span>
+                  </div>
+                  {isUpcoming && msLeft > 0 && (
+                    <div style={{ marginTop: 8, color: "#818cf8", fontSize: 12 }}>
+                      Starts in: <span style={{ fontWeight: 700 }}>{daysLeft > 0 ? daysLeft+"d " : ""}{hrsLeft}h {minLeft}m</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }} className="mob-grid1">
           {[
@@ -2604,8 +3070,8 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
        
         {tab === "start" && (
           <div style={{ ...card(), padding: 28 }}>
-            <h2 style={{ color: "#e2e8f0", margin: "0 0 6px", fontSize: "1.2rem", fontWeight: 700 }}>NEET UG 2025 - Mock Test</h2>
-            <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: 14 }}>Full-length mock examination</p>
+            <h2 style={{ color: "#e2e8f0", margin: "0 0 6px", fontSize: "1.2rem", fontWeight: 700 }}>{nextTest ? nextTest.name : "NEET UG 2025 - Mock Test"}</h2>
+            <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: 14 }}>{nextTest ? (nextTest.description || "Full-length mock examination") : "Full-length mock examination"}</p>
 
             
             {limitReached && (
@@ -2620,7 +3086,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 20 }}>
-              {[["Questions","180"],["Duration","3 Hours"],["Max Marks","720"],["Correct","+4 marks"],["Wrong","-1 mark"],["Unattempted","0 marks"]].map(([l,v]) => (
+              {[["Questions", questions ? String(questions.length) : "180"],["Duration","3 Hours"],["Max Marks", questions ? String(questions.length * 4) : "720"],["Correct","+4 marks"],["Wrong","-1 mark"],["Unattempted","0 marks"]].map(([l,v]) => (
                 <div key={l} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "10px 14px" }}>
                   <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase" }}>{l}</div>
                   <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14, marginTop: 2 }}>{v}</div>
@@ -2669,8 +3135,8 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
                     <div key={i} style={{ ...card(), padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
                       <div style={{ width: 48, height: 48, borderRadius: "50%", background: pct2>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border: "2px solid "+(pct2>=50?"#22c55e":"#ef4444"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: pct2>=50?"#4ade80":"#f87171", fontSize: 13, flexShrink: 0 }}>{pct2}%</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, color: "#c7d2fe", fontSize: "0.9rem" }}>NEET {r.year} Mock</div>
-                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}</div>
+                        <div style={{ fontWeight: 600, color: "#c7d2fe", fontSize: "0.9rem" }}>{r.test_name || ("NEET " + r.year + " Mock")}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}{r.paper_id && r.paper_id !== "NEET_2025" ? <span style={{ marginLeft: 8, color: "#475569" }}>{r.paper_id}</span> : ""}</div>
                         <div style={{ marginTop: 5, background: "rgba(0,0,0,0.3)", borderRadius: 99, height: 4, maxWidth: 200 }}>
                           <div style={{ height: "100%", borderRadius: 99, background: pct2>=50?"#22c55e":"#ef4444", width: Math.max(0,pct2)+"%" }} />
                         </div>
@@ -2695,7 +3161,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
        
         {tab === "leaderboard" && (
           <div>
-            <h3 style={{ color: "#a5b4fc", marginBottom: 14, fontSize: "1rem" }}>Top Scores - NEET 2025</h3>
+            <h3 style={{ color: "#a5b4fc", marginBottom: 14, fontSize: "1rem" }}>{nextTest ? ("Top Scores - " + nextTest.name) : "Top Scores - All Time"}</h3>
             {loadingLB ? (
               <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading leaderboard...</div>
             ) : leaderboard.length === 0 ? (
@@ -2710,7 +3176,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
                       <div style={{ width: 32, height: 32, borderRadius: "50%", background: i===0?"rgba(251,191,36,0.2)":i===1?"rgba(148,163,184,0.2)":i===2?"rgba(180,83,9,0.2)":"rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: i===0?"#fbbf24":i===1?"#94a3b8":i===2?"#b45309":"#64748b", fontSize: 14, flexShrink: 0 }}>{i+1}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: "0.9rem", color: isMe ? "#a5b4fc" : "#c7d2fe", fontWeight: isMe ? 700 : 400 }}>
-                          {isMe ? "You" : "Student " + (i+1)}
+                          {isMe ? "You" : (r.student_name || r.student_email?.split("@")[0] || "Student " + (i+1))}
                         </div>
                         <div style={{ marginTop: 4, background: "rgba(0,0,0,0.3)", borderRadius: 99, height: 4, maxWidth: 200 }}>
                           <div style={{ height: "100%", borderRadius: 99, background: i===0?"#fbbf24":"#6366f1", width: pct3+"%" }} />
@@ -2978,10 +3444,17 @@ function ExamScreen({ questions, year, onFinish, settings }) {
 
   const [timerAlert, setTimerAlert] = useState(null); // "30min"|"15min"|"5min"
 
-  // Timer - only pauses on manual pause, runs through tab switch violations
+  // Timer - auto-submits when window closes or time runs out
   useEffect(() => {
     if (paused) { clearInterval(timerRef.current); return; }
     timerRef.current = setInterval(() => {
+      // Check if exam window has ended (auto-submit)
+      const wEnd = settings?.exam_window_end ? new Date(settings.exam_window_end) : null;
+      if (wEnd && new Date() > wEnd) {
+        clearInterval(timerRef.current);
+        doFinish();
+        return;
+      }
       setTimeLeft(t => {
         if (t <= 1) { clearInterval(timerRef.current); doFinish(); return 0; }
         if (t === 1800) setTimerAlert("30min");
@@ -2991,7 +3464,7 @@ function ExamScreen({ questions, year, onFinish, settings }) {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [doFinish, paused]);
+  }, [doFinish, paused, settings]);
 
   // Right-click + tab switch blocker
   useEffect(() => {
@@ -3238,7 +3711,12 @@ function ExamScreen({ questions, year, onFinish, settings }) {
           
           <div style={{ display: "flex", gap: 10, marginTop: 28, flexWrap: "wrap", alignItems: "center" }}>
             <button onClick={toggleMark} style={btn("mark")}> {marked.has(q.id) ? "Unmark" : "Mark"} & Next</button>
-            <button onClick={toggleBookmark} style={{ ...btn("ghost"), borderColor: bookmarks.has(q.id) ? "rgba(245,158,11,0.5)" : undefined, color: bookmarks.has(q.id) ? "#fbbf24" : undefined }}>
+            <button onClick={toggleBookmark} style={{
+              ...btn("ghost"),
+              borderColor: bookmarks.has(q.id) ? "rgba(245,158,11,0.8)" : "rgba(245,158,11,0.45)",
+              color:       bookmarks.has(q.id) ? "#fbbf24" : "#f59e0b",
+              background:  bookmarks.has(q.id) ? "rgba(245,158,11,0.12)" : "rgba(245,158,11,0.05)",
+            }}>
               {bookmarks.has(q.id) ? "Bookmarked" : "Bookmark"}
             </button>
             <button onClick={clearResp} style={btn("clear")}>Clear</button>
@@ -3394,7 +3872,8 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
         "</div>";
     }).join("");
 
-    win.document.write("<!DOCTYPE html><html><head><title>NEET " + year + " Result</title><style>" +
+    const pdfTitle = meta?.testName || ("NEET " + year + " Mock Test");
+    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title><style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
       "h2{color:#312e81;margin-top:28px}" +
@@ -3406,7 +3885,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
       "td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f3f4f6}" +
       "@media print{.noprint{display:none}}" +
       "</style></head><body>" +
-      "<h1>NEET " + year + " Mock Test Report</h1>" +
+      "<h1>" + pdfTitle + " - Report</h1>" +
       "<p style='color:#6b7280;font-size:13px'>Generated on " + new Date().toLocaleString("en-IN") + "</p>" +
       "<div style='margin:16px 0'>" +
       "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / 720</div></div>" +
@@ -3440,7 +3919,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
      
       <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>Test Completed - NEET {year}</h2>
+          <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>{meta?.testName || ("Test Completed - NEET " + year)}</h2>
           <p style={{ color: "#818cf8", margin: 0, fontSize: 14 }}>Detailed Performance Analysis</p>
         </div>
         <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
@@ -3784,6 +4263,7 @@ export default function App() {
   const [questions,    setQuestions]    = useState([]);
   const [finalAnswers, setFinalAnswers] = useState({});
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
+  const [activeTest,   setActiveTest]   = useState(null); // {batch_test_id, batch_id, test_name}
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
   const darkMode = true; // always dark
@@ -3864,8 +4344,10 @@ export default function App() {
     setScreen(SCREEN.LANDING);
   };
 
-  const handleStartYear = async (paperId) => {
+  const handleStartYear = async (paperId, testMeta) => {
     const usePaperId = paperId || "NEET_2025";
+    if (testMeta) setActiveTest(testMeta);
+    else setActiveTest(null);
     setYear(2025);
     setLoadingQ(true);
     setLoadingError(null);
@@ -3929,6 +4411,7 @@ export default function App() {
     }
 
     const studentName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
+    if (meta && activeTest) meta.testName = activeTest.test_name;
     const payload = {
       year, score, correct, wrong, unattempted,
       total: questions.length, percentile,
@@ -3939,6 +4422,11 @@ export default function App() {
       student_name:      studentName,
       student_email:     user?.email || "",
       paper_id:          questions[0]?.paper_id || "NEET_2025",
+      ...(activeTest ? {
+        batch_test_id: activeTest.batch_test_id,
+        batch_id:      activeTest.batch_id,
+        test_name:     activeTest.test_name,
+      } : {}),
     };
 
     // Save to localStorage
