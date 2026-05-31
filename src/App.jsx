@@ -4448,29 +4448,13 @@ export default function App() {
   const [finalAnswers, setFinalAnswers] = useState({});
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
   const [activeTest,   setActiveTest]   = useState(null); // {batch_test_id, batch_id, test_name}
-  // Apply branding to document.body synchronously before first render
   const [branding,     setBranding]     = useState(() => {
     try {
       const cached = localStorage.getItem("neet_branding_cache");
-      if (!cached) return {};
-      const b = JSON.parse(cached);
-      // Apply background to body immediately - runs before any render
-      try {
-        const bg = b.bg_type === "solid" && b.bg_solid_color
-          ? b.bg_solid_color
-          : b.bg_type === "image" && b.bg_image_data
-          ? "url(" + b.bg_image_data + ") center/cover no-repeat"
-          : b.bg_gradient_from && b.bg_gradient_to
-          ? "linear-gradient(135deg," + b.bg_gradient_from + " 0%," + b.bg_gradient_to + " 50%," + b.bg_gradient_from + " 100%)"
-          : "";
-        if (bg) document.body.style.cssText = "margin:0;padding:0;min-height:100vh;background:" + bg;
-      } catch (_) {}
-      return b;
+      return cached ? JSON.parse(cached) : {};
     } catch (_) { return {}; }
   });
-  const [brandingReady,setBrandingReady]= useState(() => {
-    try { return !!localStorage.getItem("neet_branding_cache"); } catch (_) { return false; }
-  });
+  const [brandingReady,setBrandingReady]= useState(true);
   const [examWindowEnd, setExamWindowEnd] = useState(null); // ISO string of window end for auto-submit
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
