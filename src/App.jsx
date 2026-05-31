@@ -464,14 +464,14 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
         )}
         {/* Badge */}
         {branding.show_badge !== "false" && (
-          <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: "#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 24, fontFamily: "monospace" }}>
-            {branding.badge_text || "NEET UG TEST"}
+          <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: branding.badge_color||"#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 24, fontFamily: branding.font_family||"monospace" }}>
+            {branding.badge_text || "NTA NEET UG 2025"}
           </div>
         )}
-        <h1 style={{ color: "#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px" }}>
-          {branding.platform_name || "Test Platform"}
+        <h1 style={{ color: branding.title_color||"#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px", fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
+          {branding.platform_name || "Mock Test Platform"}
         </h1>
-        <p style={{ color: "#64748b", margin: "0 0 48px", fontSize: 15 }}>
+        <p style={{ color: branding.tagline_color||"#64748b", margin: "0 0 48px", fontSize: 15, fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
           {branding.platform_tagline || "Select your role to continue"}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="mob-grid1">
@@ -479,14 +479,14 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
             onMouseEnter={e => e.currentTarget.style.background = "rgba(99,102,241,0.25)"}
             onMouseLeave={e => e.currentTarget.style.background = "rgba(99,102,241,0.12)"}>
             <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>&#127891;</div>
-            <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8 }}>Student</div>
+            <div style={{ color: branding.card_text_color||"#a5b4fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8, fontFamily: branding.font_family||"inherit" }}>Student</div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Login to take the mock exam</div>
           </button>
           <button onClick={onAdmin} style={{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: 16, padding: "32px 20px", cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}
             onMouseEnter={e => e.currentTarget.style.background = "rgba(168,85,247,0.22)"}
             onMouseLeave={e => e.currentTarget.style.background = "rgba(168,85,247,0.1)"}>
             <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>&#128736;</div>
-            <div style={{ color: "#c084fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8 }}>Admin</div>
+            <div style={{ color: branding.card_text_color||"#c084fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8, fontFamily: branding.font_family||"inherit" }}>Admin</div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Manage questions and results</div>
           </button>
         </div>
@@ -693,7 +693,9 @@ function AdminScreen({ onSignOut }) {
         platform_tagline:"Select your role to continue", bg_type:"gradient",
         bg_gradient_from:"#0f0c29", bg_gradient_to:"#302b63",
         bg_solid_color:"#0f172a", bg_image_data:"", accent_color:"#7c3aed",
-        show_badge:"true", badge_text:"NTA NEET UG 2025"
+        show_badge:"true", badge_text:"NTA NEET UG 2025",
+        font_family:"Georgia, serif", title_color:"#ffffff",
+        tagline_color:"#94a3b8", badge_color:"#c084fc", card_text_color:"#a5b4fc"
       };
       setBrandingForm(defaults); // show defaults immediately so UI is never blank
       try {
@@ -2697,9 +2699,9 @@ function AdminScreen({ onSignOut }) {
                    : brandingForm.bg_type === "image" && brandingForm.bg_image_data ? { backgroundImage:"url("+brandingForm.bg_image_data+")", backgroundSize:"cover", backgroundPosition:"center" }
                    : { background:"linear-gradient(135deg,"+(brandingForm.bg_gradient_from||"#0f0c29")+" 0%,"+(brandingForm.bg_gradient_to||"#302b63")+" 100%)" }) }}>
                 {(brandingForm.logo_data || brandingForm.logo_url) && <img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:48, maxWidth:140, objectFit:"contain", borderRadius:4 }} />}
-                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:"#c084fc", letterSpacing:1 }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
-                <div style={{ color:"#fff", fontWeight:700, fontSize:"1.1rem" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
-                <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
+                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:brandingForm.badge_color||"#c084fc", letterSpacing:1, fontFamily:brandingForm.font_family||"inherit" }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
+                <div style={{ color:brandingForm.title_color||"#fff", fontWeight:700, fontSize:"1.1rem", fontFamily:brandingForm.font_family||"inherit" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
+                <div style={{ color:brandingForm.tagline_color||"rgba(255,255,255,0.5)", fontSize:12, fontFamily:brandingForm.font_family||"inherit" }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
               </div>
             </div>
              {/* Logo */}
@@ -2729,6 +2731,62 @@ function AdminScreen({ onSignOut }) {
                 {brandingForm.show_badge !== "false" && <div><label style={alabel}>Badge Text</label><input value={brandingForm.badge_text||""} onChange={e=>setBrandingForm(p=>({...p,badge_text:e.target.value}))} placeholder="NTA NEET UG 2025" style={ainput} /></div>}
               </div>
             </div>
+            {/* Font & Colors */}
+            <div style={{ ...acard, padding:"18px 20px" }}>
+              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Font & Colors</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+
+                {/* Font family */}
+                <div>
+                  <label style={alabel}>Font</label>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {[
+                      ["Georgia, serif",           "Georgia"],
+                      ["'Crimson Pro', Georgia, serif", "Crimson Pro"],
+                      ["Arial, sans-serif",         "Arial"],
+                      ["'Trebuchet MS', sans-serif","Trebuchet"],
+                      ["'Courier New', monospace",  "Courier"],
+                    ].map(([val, label]) => (
+                      <button key={val}
+                        onClick={() => setBrandingForm(p => ({ ...p, font_family: val }))}
+                        style={{ ...abtn(brandingForm.font_family === val ? "primary" : "ghost"), fontSize: 12, padding: "6px 14px", fontFamily: val }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ marginTop:8 }}>
+                    <label style={alabel}>Or enter custom font name</label>
+                    <input value={brandingForm.font_family||""} onChange={e=>setBrandingForm(p=>({...p,font_family:e.target.value}))}
+                      placeholder="e.g. 'Poppins', sans-serif"
+                      style={{ ...ainput, fontSize:12, fontFamily: brandingForm.font_family||"inherit" }} />
+                  </div>
+                </div>
+
+                {/* Text colors */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  {[
+                    ["title_color",   "Title Color",   "#ffffff"],
+                    ["tagline_color", "Tagline Color", "#94a3b8"],
+                    ["badge_color",   "Badge Color",   "#c084fc"],
+                    ["card_text_color","Card Text",    "#a5b4fc"],
+                  ].map(([k, l, d]) => (
+                    <div key={k}>
+                      <label style={alabel}>{l}</label>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <input type="color" value={brandingForm[k]||d}
+                          onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))}
+                          style={{ width:44, height:36, borderRadius:8, border:"none", cursor:"pointer" }} />
+                        <input value={brandingForm[k]||d}
+                          onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))}
+                          style={{ ...ainput, flex:1, fontFamily:"monospace", fontSize:12 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </div>
+
              {/* Background */}
             <div style={{ ...acard, padding:"18px 20px" }}>
               <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Background</div>
