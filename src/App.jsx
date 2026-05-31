@@ -4434,6 +4434,7 @@ export default function App() {
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
   const [activeTest,   setActiveTest]   = useState(null); // {batch_test_id, batch_id, test_name}
   const [branding,     setBranding]     = useState({});  // logo, bg, colors from DB
+  const [brandingReady,setBrandingReady]= useState(false); // don't render landing until branding loaded
   const [examWindowEnd, setExamWindowEnd] = useState(null); // ISO string of window end for auto-submit
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
@@ -4454,6 +4455,7 @@ export default function App() {
       try {
         const { data } = await supabase.from("branding").select("key,value");
         if (data) { const b = {}; data.forEach(r => { b[r.key] = r.value; }); setBranding(b); }
+      setBrandingReady(true);
       } catch (_) {}
     })();
   }, []);
@@ -4861,7 +4863,10 @@ export default function App() {
         }
       `}</style>
 
-      {screen === SCREEN.LANDING     && <LandingScreen onStudent={() => setScreen(SCREEN.AUTH)} onAdmin={() => setScreen(SCREEN.ADMIN_AUTH)} branding={branding} />}
+      {screen === SCREEN.LANDING     && (brandingReady
+        ? <LandingScreen onStudent={() => setScreen(SCREEN.AUTH)} onAdmin={() => setScreen(SCREEN.ADMIN_AUTH)} branding={branding} />
+        : <div style={{ minHeight:"100vh", background:"#0f0c29" }} />
+      )}
       {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} />}
       {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
