@@ -4345,12 +4345,38 @@ export default function App() {
       } catch { return false; }
     };
 
+    // 1b. Check for a recently submitted result (show result on reload instead of landing)
+    const tryResumeResult = async (u) => {
+      try {
+        const raw = localStorage.getItem("neet_last_result");
+        if (!raw) return false;
+        const saved = JSON.parse(raw);
+        // Only restore if saved within last 2 hours
+        if (!saved?.savedAt || Date.now() - saved.savedAt > 2 * 60 * 60 * 1000) return false;
+        if (!saved.questionIds?.length) return false;
+        // Fetch questions by IDs to restore result screen
+        const { data: qs } = await supabase.from("questions")
+          .select("id, number, subject, type, question_text, equation, diagram_url, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, paper_id")
+          .in("id", saved.questionIds.slice(0, 180));
+        if (!qs || !qs.length) return false;
+        // Sort by original order
+        const ordered = saved.questionIds.map(id => qs.find(q => q.id === id)).filter(Boolean);
+        setQuestions(ordered);
+        setFinalAnswers(saved.answers || {});
+        setFinalMeta(saved.meta || {});
+        setScreen(SCREEN.RESULT);
+        return true;
+      } catch { return false; }
+    };
+
     // 2. Auth state
     if (isSupabaseConfigured()) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
           setUser(session.user);
-          if (!tryResumeExam(session.user)) setScreen(SCREEN.DASHBOARD);
+          // Check for pending result first, then exam, then dashboard
+          const hasResult = await tryResumeResult(session.user);
+          if (!hasResult && !tryResumeExam(session.user)) setScreen(SCREEN.DASHBOARD);
         } else {
           setScreen(SCREEN.LANDING);
         }
@@ -4416,6 +4442,16 @@ export default function App() {
   const handleFinish = async (ans, marked, meta) => {
     setFinalAnswers(ans);
     setFinalMeta(meta || {});
+    // Persist result so page reload shows result instead of landing
+    try {
+      localStorage.setItem("neet_last_result", JSON.stringify({
+        answers: ans,
+        meta: meta || {},
+        questionIds: questions.map(q => q.id),
+        paper_id: questions[0]?.paper_id || "NEET_2025",
+        savedAt: Date.now(),
+      }));
+    } catch (_) {}
     let correct = 0, wrong = 0, unattempted = 0;
     questions.forEach(q => {
       if (ans[q.id] === undefined) unattempted++;
@@ -4695,7 +4731,7 @@ export default function App() {
       {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} />}
       {screen === SCREEN.RESULT       && (
         <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta}
-          onDashboard={() => setScreen(SCREEN.DASHBOARD)} />
+          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }} />
       )}
     </>
   );
