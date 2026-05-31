@@ -2898,7 +2898,12 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
     }
     if (eff?.exam_enabled === "false") { setAccessErr("Exam access is currently disabled."); return; }
     setAccessErr("");
-    onStart(eff?.paper_id || "NEET_2025", nextTest ? { batch_test_id: nextTest.id, batch_id: nextTest.batch_id, test_name: nextTest.name } : null);
+    onStart(eff?.paper_id || "NEET_2025", nextTest ? {
+      batch_test_id:    nextTest.id,
+      batch_id:         nextTest.batch_id,
+      test_name:        nextTest.name,
+      exam_window_end:  nextTest.exam_window_end || null,
+    } : null);
   };
 
   const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Student";
@@ -3324,7 +3329,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
 // 
 // EXAM SCREEN
 // 
-function ExamScreen({ questions, year, onFinish, settings }) {
+function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
   const restoreSession = () => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
@@ -3459,13 +3464,16 @@ function ExamScreen({ questions, year, onFinish, settings }) {
   useEffect(() => {
     if (paused) { clearInterval(timerRef.current); return; }
     timerRef.current = setInterval(() => {
-      // Auto-submit only if BOTH start and end are set and window has genuinely ended
-      const wStart = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
-      const wEnd   = settings?.exam_window_end   ? new Date(settings.exam_window_end)   : null;
-      if (wStart && wEnd && new Date() > wEnd && new Date() > wStart) {
-        clearInterval(timerRef.current);
-        doFinish();
-        return;
+      // Auto-submit when exam window explicitly ends (uses prop, not global settings)
+      if (examWindowEnd) {
+        const wEnd = new Date(examWindowEnd);
+        const now  = new Date();
+        // Safety: only trigger if window end is in the past AND exam started > 60s ago
+        if (now > wEnd && (TOTAL_TIME - timeLeft) > 60) {
+          clearInterval(timerRef.current);
+          doFinish();
+          return;
+        }
       }
       setTimeLeft(t => {
         if (t <= 1) { clearInterval(timerRef.current); doFinish(); return 0; }
@@ -4276,6 +4284,7 @@ export default function App() {
   const [finalAnswers, setFinalAnswers] = useState({});
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
   const [activeTest,   setActiveTest]   = useState(null); // {batch_test_id, batch_id, test_name}
+  const [examWindowEnd, setExamWindowEnd] = useState(null); // ISO string of window end for auto-submit
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
   const darkMode = true; // always dark
@@ -4360,6 +4369,8 @@ export default function App() {
     const usePaperId = paperId || "NEET_2025";
     if (testMeta) setActiveTest(testMeta);
     else setActiveTest(null);
+    // Store the exam window end so ExamScreen can auto-submit at the right time
+    setExamWindowEnd(testMeta?.exam_window_end || null);
     setYear(2025);
     setLoadingQ(true);
     setLoadingError(null);
@@ -4671,7 +4682,7 @@ export default function App() {
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} />}
       {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} />}
-      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} />}
+      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} />}
       {screen === SCREEN.RESULT       && (
         <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta}
           onDashboard={() => setScreen(SCREEN.DASHBOARD)} />
