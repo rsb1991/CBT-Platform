@@ -24,8 +24,23 @@ const ADMIN_PASS  = import.meta.env.VITE_ADMIN_PASS  || "Neet@Admin#2025";
 const AVAILABLE_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
 
 // Theme context - shared across all components
-const ThemeCtx = { dark: true }; // mutable object, avoids full React context overhead
+const ThemeCtx = { dark: true, branding: {} }; // mutable object shared across all screens
 const getTheme = () => ThemeCtx.dark;
+const getBranding = () => ThemeCtx.branding;
+
+// Helper: compute background style from branding
+const brandingBg = (b = {}) => {
+  if (b.bg_type === "solid" && b.bg_solid_color)
+    return { background: b.bg_solid_color };
+  if (b.bg_type === "image" && b.bg_image_data)
+    return { backgroundImage: "url(" + b.bg_image_data + ")", backgroundSize: "cover", backgroundPosition: "center" };
+  if (b.bg_gradient_from && b.bg_gradient_to)
+    return { background: "linear-gradient(135deg," + b.bg_gradient_from + " 0%," + b.bg_gradient_to + " 50%," + b.bg_gradient_from + " 100%)" };
+  return { background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)" };
+};
+const brandingFont = (b = {}) => b.font_family || "'Crimson Pro', Georgia, serif";
+const brandingTitle = (b = {}) => b.title_color || "#ffffff";
+const brandingTagline = (b = {}) => b.tagline_color || "#94a3b8";
 
 // 
 // FULL 180-QUESTION BANK (45 per subject)
@@ -516,7 +531,7 @@ function AdminAuthScreen({ onSuccess, onBack }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: brandingFont(getBranding()), padding: "1.5rem" }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14, marginBottom: 24, fontFamily: "inherit" }}>
           &larr; Back
@@ -1368,7 +1383,7 @@ function AdminScreen({ onSignOut }) {
   const filtered = questions.filter(q => (subFilter === "All" || q.subject === subFilter) && (!search || String(q.number).includes(search) || (q.question_text || "").toLowerCase().includes(search.toLowerCase())));
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "Georgia, serif", color: "#e2e8f0" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()), color: "#e2e8f0" }}>
       
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(168,85,247,0.2)", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ color: "#c084fc", fontWeight: 700, fontSize: "1rem" }}>CBT Admin Panel</span>
@@ -2842,6 +2857,7 @@ function AdminScreen({ onSignOut }) {
 // AUTH SCREEN
 // 
 function AuthScreen({ onAuth }) {
+  const b = getBranding();
   const [mode, setMode] = useState("login"); // login | signup
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2868,7 +2884,7 @@ function AuthScreen({ onAuth }) {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+      minHeight: "100vh", ...brandingBg(getBranding()),
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem"
     }}>
@@ -3123,7 +3139,8 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const avgScore  = history.length ? Math.round(history.reduce((s, r) => s + r.score, 0) / history.length) : null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()) }}>
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
         @font-face { font-family: 'Kruti Dev 010'; src: local('Kruti Dev 010'); }
@@ -3413,9 +3430,10 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
 // INSTRUCTIONS
 // 
 function InstructionsScreen({ year, onBegin, onBack }) {
+  const b = getBranding();
   const [agreed, setAgreed] = useState(false);
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", fontFamily: "'Crimson Pro', Georgia, serif", padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(b), fontFamily: brandingFont(b), padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ maxWidth: 780, width: "100%" }}>
         <div style={{ ...card(), overflow: "hidden" }}>
           <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 30px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -3806,7 +3824,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
   const subjectColors = ["#6366f1","#f59e0b","#22c55e","#f43f5e"];
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()), color: "#e2e8f0" }}>
       
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 12 }}>
         <div>
@@ -4157,7 +4175,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
   const rank_band = pct >= 65 ? { label: "Excellent", color: "#4ade80" } : pct >= 50 ? { label: "Good", color: "#fbbf24" } : pct >= 35 ? { label: "Average", color: "#f59e0b" } : { label: "Needs Work", color: "#f87171" };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0", paddingBottom: 60 }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()), color: "#e2e8f0", paddingBottom: 60 }}>
      
       <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -4522,6 +4540,7 @@ export default function App() {
 
   // Sync theme to global context so all components can read it
   ThemeCtx.dark = darkMode;
+  ThemeCtx.branding = branding;
 
   // Load platform settings + branding from Supabase on mount
   useEffect(() => {
@@ -4749,7 +4768,7 @@ export default function App() {
 
   if (loadingQ) {
     return (
-      <div style={{ height: "100vh", background: "#070d1a", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, fontFamily: "Georgia, serif" }}>
+      <div style={{ height: "100vh", ...brandingBg(getBranding()), display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, fontFamily: brandingFont(getBranding()) }}>
         <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid rgba(99,102,241,0.3)", borderTop: "3px solid #6366f1", animation: "spin 0.8s linear infinite" }} />
         <div style={{ color: "#818cf8", fontSize: "1rem" }}>Loading question bank</div>
         <div style={{ color: "#475569", fontSize: 13 }}>Connecting to Supabase</div>
@@ -4804,7 +4823,7 @@ export default function App() {
     ];
 
     return (
-      <div style={{ height: "100vh", background: "#070d1a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", padding: 24 }}>
+      <div style={{ height: "100vh", ...brandingBg(getBranding()), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: brandingFont(getBranding()), padding: 24 }}>
         <div style={{ maxWidth: 560, width: "100%", background: "#0f172a", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: 32 }}>
           
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
