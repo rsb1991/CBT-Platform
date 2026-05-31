@@ -442,6 +442,11 @@ const input = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1p
 // 
 // LANDING SCREEN
 function LandingScreen({ onStudent, onAdmin, branding = {} }) {
+  // Hide the pre-landing overlay (rendered in index.html for instant display)
+  React.useEffect(() => {
+    if (window.__hidePrelanding) window.__hidePrelanding();
+  }, []);
+
   const bgType = branding.bg_type || "gradient";
   const bgStyle = bgType === "solid"
     ? { background: branding.bg_solid_color || "#0f172a" }
@@ -1335,8 +1340,16 @@ function AdminScreen({ onSignOut }) {
     for (const entry of entries) {
       await supabase.from("branding").upsert(entry, { onConflict: "key" });
     }
-    // Update localStorage cache so next visit shows updated branding instantly
-    try { localStorage.setItem("neet_branding_cache", JSON.stringify(brandingForm)); } catch (_) {}
+    // Update localStorage cache + CSS variable so next visit shows updated branding instantly
+    try {
+      localStorage.setItem("neet_branding_cache", JSON.stringify(brandingForm));
+      // Apply new background to body immediately for current session
+      var bg = "";
+      if (brandingForm.bg_type === "solid" && brandingForm.bg_solid_color) bg = brandingForm.bg_solid_color;
+      else if (brandingForm.bg_type === "image" && brandingForm.bg_image_data) bg = "url(" + brandingForm.bg_image_data + ") center/cover no-repeat";
+      else if (brandingForm.bg_gradient_from && brandingForm.bg_gradient_to) bg = "linear-gradient(135deg," + brandingForm.bg_gradient_from + " 0%," + brandingForm.bg_gradient_to + " 50%," + brandingForm.bg_gradient_from + " 100%)";
+      if (bg) document.documentElement.style.setProperty("--landing-bg", bg);
+    } catch (_) {}
     setBrandingLoading(false);
     setBrandingMsg({ type: "ok", text: "Branding saved! Changes are live on the landing page." });
   };
@@ -4464,9 +4477,21 @@ export default function App() {
       } catch (_) {}
       try {
         const { data } = await supabase.from("branding").select("key,value");
-        if (data) { const b = {}; data.forEach(r => { b[r.key] = r.value; }); setBranding(b); }
-      setBrandingReady(true);
-      } catch (_) {}
+        if (data && data.length > 0) {
+          const b = {};
+          data.forEach(r => { b[r.key] = r.value; });
+          setBranding(b);
+          try {
+            localStorage.setItem("neet_branding_cache", JSON.stringify(b));
+            var bg = b.bg_type === "solid" && b.bg_solid_color ? b.bg_solid_color
+              : b.bg_type === "image" && b.bg_image_data ? "url(" + b.bg_image_data + ") center/cover no-repeat"
+              : b.bg_gradient_from && b.bg_gradient_to ? "linear-gradient(135deg," + b.bg_gradient_from + " 0%," + b.bg_gradient_to + " 50%," + b.bg_gradient_from + " 100%)"
+              : "";
+            if (bg) document.documentElement.style.setProperty("--landing-bg", bg);
+          } catch (_) {}
+        }
+        setBrandingReady(true);
+      } catch (_) { setBrandingReady(true); }
     })();
   }, []);
 
