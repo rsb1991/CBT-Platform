@@ -1091,9 +1091,6 @@ function AdminScreen({ onSignOut }) {
     URL.revokeObjectURL(url);
   };
 
-  // Load batches
-  const loadBatches = async () => {
-  // Load batches
   const loadBatches = async () => {
     setBatchLoading(true);
     const { data } = await supabase.from("batches").select("*").order("created_at");
