@@ -344,7 +344,7 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
   try {
     const { data, error } = await supabase
       .from("questions")
-      .select("id, number, subject, type, question_text, equation, diagram_url, diagram_data, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, solution_diagram_data, paper_id")
+      .select("id, number, subject, type, question_text, equation, diagram_url, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, paper_id")
       .eq("paper_id", paperId)
       .order("number", { ascending: true });
 
@@ -366,12 +366,12 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
       question_text: q.question_text || q.text || "",
       equation:      q.equation || "",
       diagram_url:   q.diagram_url || "",
-      diagram_data:  q.diagram_data || "",
+      diagram_data:  "",  // loaded on-demand per question
       options:       [q.option_a, q.option_b, q.option_c, q.option_d],
       correct:       q.correct,
       solution_text:         q.solution_text || q.solution || "",
       solution_eq:           q.solution_eq || "",
-      solution_diagram_data: q.solution_diagram_data || "",
+      solution_diagram_data: "",  // loaded on-demand
       year:                  2025,
     }));
 
@@ -3376,6 +3376,21 @@ function ExamScreen({ questions, year, onFinish, settings }) {
   const webcamRef   = useRef(null);
   const q = questions[idx];
 
+  // Lazy-load diagram images for current question on demand
+  useEffect(() => {
+    if (!q?.id) return;
+    if (q.diagram_data || q.solution_diagram_data) return; // already have it
+    supabase.from("questions")
+      .select("id, diagram_data, solution_diagram_data")
+      .eq("id", q.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.diagram_data)          q.diagram_data          = data.diagram_data;
+        if (data?.solution_diagram_data) q.solution_diagram_data = data.solution_diagram_data;
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q?.id]);
+
   // Webcam setup if enabled
   useEffect(() => {
     if (settings?.webcam_enabled === "true") {
@@ -3444,9 +3459,10 @@ function ExamScreen({ questions, year, onFinish, settings }) {
   useEffect(() => {
     if (paused) { clearInterval(timerRef.current); return; }
     timerRef.current = setInterval(() => {
-      // Check if exam window has ended (auto-submit)
-      const wEnd = settings?.exam_window_end ? new Date(settings.exam_window_end) : null;
-      if (wEnd && new Date() > wEnd) {
+      // Auto-submit only if BOTH start and end are set and window has genuinely ended
+      const wStart = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
+      const wEnd   = settings?.exam_window_end   ? new Date(settings.exam_window_end)   : null;
+      if (wStart && wEnd && new Date() > wEnd && new Date() > wStart) {
         clearInterval(timerRef.current);
         doFinish();
         return;
