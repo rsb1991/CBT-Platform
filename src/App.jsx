@@ -3082,7 +3082,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 20 }}>
-              {[["Questions", questions ? String(questions.length) : "180"],["Duration","3 Hours"],["Max Marks", questions ? String(questions.length * 4) : "720"],["Correct","+4 marks"],["Wrong","-1 mark"],["Unattempted","0 marks"]].map(([l,v]) => (
+              {[["Questions","180"],["Duration","3 Hours"],["Max Marks","720"],["Correct","+4 marks"],["Wrong","-1 mark"],["Unattempted","0 marks"]].map(([l,v]) => (
                 <div key={l} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "10px 14px" }}>
                   <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase" }}>{l}</div>
                   <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14, marginTop: 2 }}>{v}</div>
