@@ -1,10 +1,10 @@
 // QuestionRenderer.jsx
 // Renders question_text + LaTeX equations + images as one seamless block
-// No npm install needed — KaTeX loads from CDN automatically
+// No npm install needed  KaTeX loads from CDN automatically
 //
 // IMAGE EMBEDDING OPTIONS:
-//   1. diagram_url column  — image always appears as part of the question body
-//   2. [img]https://...[/img] tag inside question_text — image at that exact position
+//   1. diagram_url column   image always appears as part of the question body
+//   2. [img]https://...[/img] tag inside question_text  image at that exact position
 //   3. Both can be used together
 //
 // LATEX OPTIONS:
@@ -14,9 +14,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// KaTeX loader — CDN, cached after first load
-// ─────────────────────────────────────────────────────────────────────────────
+// 
+// KaTeX loader  CDN, cached after first load
+// 
 let _katexPromise = null;
 function loadKatex() {
   if (_katexPromise) return _katexPromise;
@@ -38,9 +38,9 @@ function loadKatex() {
   return _katexPromise;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// InlineImage — single image with spinner + error state
-// ─────────────────────────────────────────────────────────────────────────────
+// 
+// InlineImage  single image with spinner + error state
+// 
 function InlineImage({ url, alt = "diagram" }) {
   const [st, setSt] = useState("loading");
   if (!url || !url.trim()) return null;
@@ -59,7 +59,7 @@ function InlineImage({ url, alt = "diagram" }) {
             animation: "qr-spin 0.8s linear infinite",
             flexShrink: 0,
           }} />
-          Loading image…
+          Loading image
         </span>
       )}
       {st === "error" && (
@@ -67,10 +67,10 @@ function InlineImage({ url, alt = "diagram" }) {
           display: "flex", flexDirection: "column", gap: 4,
           color: "#f87171", fontSize: 13, padding: "8px 0"
         }}>
-          <span>⚠️ Image could not load</span>
+          <span> Image could not load</span>
           <a href={url} target="_blank" rel="noreferrer"
             style={{ color: "#818cf8", fontSize: 11 }}>
-            Open in new tab ↗
+            Open in new tab 
           </a>
         </span>
       )}
@@ -99,15 +99,15 @@ function InlineImage({ url, alt = "diagram" }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RichBlock — renders a string that may contain:
+// 
+// RichBlock  renders a string that may contain:
 //   $...$       inline LaTeX
 //   $$...$$     block LaTeX
 //   [img]url[/img]  inline image at that position
 //   plain text
 //
 // All elements flow naturally in document order.
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
   const ref = useRef(null);
   const [imgTokens, setImgTokens] = useState([]); // {id, url} for React-rendered images
@@ -130,7 +130,7 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
       parts.forEach((part, idx) => {
         if (!part) return;
 
-        // ── Block math $$...$$
+        //  Block math $$...$$
         if (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) {
           const math = part.slice(2, -2).trim();
           const wrap = document.createElement("div");
@@ -146,7 +146,7 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
           return;
         }
 
-        // ── Inline math $...$
+        //  Inline math $...$
         if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
           const math = part.slice(1, -1).trim();
           const span = document.createElement("span");
@@ -160,12 +160,12 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
           return;
         }
 
-        // ── Inline image [img]url[/img]
+        //  Inline image [img]url[/img]
         const imgMatch = part.match(/^\[img\]([\s\S]*?)\[\/img\]$/i);
         if (imgMatch) {
           const url = imgMatch[1].trim();
           const tokenId = `qr-img-${idx}-${Math.random().toString(36).slice(2)}`;
-          // Placeholder span — React will render the image into a sibling div
+          // Placeholder span  React will render the image into a sibling div
           const placeholder = document.createElement("span");
           placeholder.id = tokenId;
           placeholder.setAttribute("data-img-url", url);
@@ -175,7 +175,7 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
           return;
         }
 
-        // ── Plain text (preserve newlines)
+        //  Plain text (preserve newlines)
         part.split("\n").forEach((line, i, arr) => {
           if (line) el.appendChild(document.createTextNode(line));
           if (i < arr.length - 1) el.appendChild(document.createElement("br"));
@@ -193,7 +193,7 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
   useEffect(() => {
     if (!imgTokens.length || !ref.current) return;
     // Images are rendered as React children in the return below via imgTokens state
-    // Placeholder spans just serve as anchors — actual images rendered below in JSX
+    // Placeholder spans just serve as anchors  actual images rendered below in JSX
   }, [imgTokens]);
 
   return (
@@ -219,14 +219,14 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// QuestionBody — merges question_text + equation + diagram_url
+// 
+// QuestionBody  merges question_text + equation + diagram_url
 // into one natural reading flow:
 //
-//   [question_text — may contain $...$ and [img]url[/img]]
-//   [equation — appended inline or as block]
-//   [diagram_url image — appears right after text/equation]
-// ─────────────────────────────────────────────────────────────────────────────
+//   [question_text  may contain $...$ and [img]url[/img]]
+//   [equation  appended inline or as block]
+//   [diagram_url image  appears right after text/equation]
+// 
 function QuestionBody({ questionText, equation, diagramUrl, diagramData, fontSize = "1.05rem" }) {
   const hasText    = questionText && questionText.trim();
   const hasEq      = equation && equation.trim();
@@ -249,7 +249,7 @@ function QuestionBody({ questionText, equation, diagramUrl, diagramData, fontSiz
   }
 
   if (hasDiagram) {
-    // Append image tag — it will flow right after the text/equation
+    // Append image tag  it will flow right after the text/equation
     merged += "\n[img]" + diagramUrlFinal + "[/img]";
   }
 
@@ -262,16 +262,16 @@ function QuestionBody({ questionText, equation, diagramUrl, diagramData, fontSiz
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// QuestionRenderer — main export
+// 
+// QuestionRenderer  main export
 //
 // Props:
-//   q           — question object from Supabase or local bank
-//   showSolution — show answer explanation (result/review screen)
-//   userAnswer   — index the user picked (for result colouring)
-//   onSelect     — callback(i) when an option is clicked (exam screen)
-//   selectedIdx  — currently highlighted option (exam screen)
-// ─────────────────────────────────────────────────────────────────────────────
+//   q            question object from Supabase or local bank
+//   showSolution  show answer explanation (result/review screen)
+//   userAnswer    index the user picked (for result colouring)
+//   onSelect      callback(i) when an option is clicked (exam screen)
+//   selectedIdx   currently highlighted option (exam screen)
+// 
 export default function QuestionRenderer({
   q,
   showSolution = false,
@@ -291,7 +291,7 @@ export default function QuestionRenderer({
   return (
     <div style={{ fontFamily: "Georgia, serif" }}>
 
-      {/* ── Question: text + equation + image, all inline ── */}
+      {/*  Question: text + equation + image, all inline  */}
       <QuestionBody
         questionText={q.question_text || q.text || ""}
         equation={q.equation || ""}
@@ -300,7 +300,7 @@ export default function QuestionRenderer({
         fontSize="1.05rem"
       />
 
-      {/* ── Options ── */}
+      {/*  Options  */}
       {optionTexts.some(Boolean) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
           {optionTexts.map((opt, i) => {
@@ -357,7 +357,7 @@ export default function QuestionRenderer({
                 </div>
                 {showSolution && isCorrect && (
                   <span style={{ color: "#4ade80", fontSize: 12, flexShrink: 0, marginTop: 6, fontWeight: 600 }}>
-                    ✓ Correct
+                     Correct
                   </span>
                 )}
                 {isUserWrong && (
@@ -371,8 +371,8 @@ export default function QuestionRenderer({
         </div>
       )}
 
-      {/* ── Solution block ── */}
-      {showSolution && (hasSolText || hasSolEq) && (
+      {/* -- Solution block -- */}
+      {showSolution && (hasSolText || hasSolEq || q.solution_diagram_data || q.solution_diagram_url) && (
         <div style={{
           marginTop: 18,
           background: "rgba(99,102,241,0.08)",
@@ -380,12 +380,13 @@ export default function QuestionRenderer({
           borderRadius: 10, padding: "14px 18px",
         }}>
           <div style={{ color: "#818cf8", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
-            💡 Solution
+            Solution
           </div>
           <QuestionBody
             questionText={q.solution_text || q.solution || ""}
             equation={q.solution_eq || ""}
-            diagramUrl=""
+            diagramUrl={q.solution_diagram_url || ""}
+            diagramData={q.solution_diagram_data || ""}
             fontSize="0.95rem"
           />
         </div>
