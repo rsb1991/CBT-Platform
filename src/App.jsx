@@ -683,9 +683,21 @@ function AdminScreen({ onSignOut }) {
     if (tab === "settings") loadSettings();
     if (tab === "students") loadStudents();
     if (tab === "branding") (async () => {
+      const defaults = {
+        logo_data:"", logo_url:"", platform_name:"Mock Test Platform",
+        platform_tagline:"Select your role to continue", bg_type:"gradient",
+        bg_gradient_from:"#0f0c29", bg_gradient_to:"#302b63",
+        bg_solid_color:"#0f172a", bg_image_data:"", accent_color:"#7c3aed",
+        show_badge:"true", badge_text:"NTA NEET UG 2025"
+      };
+      setBrandingForm(defaults); // show defaults immediately so UI is never blank
       try {
         const { data } = await supabase.from("branding").select("key,value");
-        if (data) { const b = {}; data.forEach(r => { b[r.key] = r.value; }); setBrandingForm(b); }
+        if (data && data.length > 0) {
+          const b = { ...defaults };
+          data.forEach(r => { b[r.key] = r.value; });
+          setBrandingForm(b);
+        }
       } catch (_) {}
     })();
   }, [tab]);
