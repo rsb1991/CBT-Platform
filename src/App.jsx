@@ -708,7 +708,7 @@ function AdminScreen({ onSignOut }) {
         platform_tagline:"Select your role to continue", bg_type:"gradient",
         bg_gradient_from:"#0f0c29", bg_gradient_to:"#302b63",
         bg_solid_color:"#0f172a", bg_image_data:"", accent_color:"#7c3aed",
-        show_badge:"true", badge_text:"NEET TEST PLATFORM",
+        show_badge:"true", badge_text:"NTA NEET UG 2025",
         font_family:"Georgia, serif", title_color:"#ffffff",
         tagline_color:"#94a3b8", badge_color:"#c084fc", card_text_color:"#a5b4fc"
       };
@@ -4088,13 +4088,33 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
   });
 
   // PDF download
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
+    // Re-fetch full question data (options + images) before building PDF
     const win = window.open("", "_blank");
     if (!win) return;
+    win.document.write("<html><body style='font-family:Arial;padding:40px;color:#333'><h2>Generating PDF...</h2><p>Please wait while we load question data.</p></body></html>");
+
+    let fullQuestions = questions;
+    try {
+      const ids = questions.map(q => q.id).filter(Boolean);
+      if (ids.length > 0) {
+        const { data } = await supabase.from("questions")
+          .select("id, number, subject, question_text, equation, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, diagram_data, solution_diagram_data")
+          .in("id", ids);
+        if (data && data.length > 0) {
+          // Merge full data into questions array
+          const map = {};
+          data.forEach(q => { map[q.id] = q; });
+          fullQuestions = questions.map(q => map[q.id] ? { ...q, ...map[q.id] } : q);
+        }
+      }
+    } catch (_) {}
+
+    win.document.open();
     const OPTS = ["A","B","C","D"];
     // Subject-wise summary
     const subjSummary = ["Physics","Chemistry","Botany","Zoology"].map(s => {
-      const sq = questions.filter(q => q.subject === s);
+      const sq = fullQuestions.filter(q => q.subject === s);
       const c  = sq.filter(q => answers[q.id] === q.correct).length;
       const w  = sq.filter(q => answers[q.id] !== undefined && answers[q.id] !== q.correct).length;
       const u  = sq.filter(q => answers[q.id] === undefined).length;
@@ -4102,7 +4122,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
       return "<tr><td><b>" + s + "</b></td><td style='color:green'>" + c + "</td><td style='color:red'>" + w + "</td><td style='color:gray'>" + u + "</td><td><b>" + sc + "</b></td></tr>";
     }).join("");
     // Full question list with solutions
-    const qRows = questions.map(q => {
+    const qRows = fullQuestions.map(q => {
       const ua = answers[q.id];
       const isC = ua === q.correct;
       const isW = ua !== undefined && !isC;
@@ -4126,8 +4146,9 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
         "<span style='background:" + (isC?"#dcfce7":isW?"#fee2e2":"#f9fafb") + ";color:" + color + ";padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700'>" + status + " " + marks + "</span>" +
         "</div>" +
         "<p style='margin:0 0 10px;font-size:13px;color:#1f2937'>" + (q.question_text || q.equation || "") + "</p>" +
+        (q.diagram_data ? "<img src='" + q.diagram_data + "' style='max-width:100%;max-height:200px;object-fit:contain;margin:6px 0;display:block;'/>" : "") +
         optRows +
-        (q.solution_text ? "<div style='margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af'><b>Solution: </b>" + q.solution_text + "</div>" : "") +
+        (q.solution_text ? "<div style='margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af'><b>Solution: </b>" + q.solution_text + (q.solution_diagram_data ? "<br/><img src='" + q.solution_diagram_data + "' style='max-width:100%;max-height:160px;margin-top:6px;display:block;'/>" : "") + "</div>" : "") +
         "<div style='margin-top:6px;font-size:10px;color:#9ca3af'>Time spent: " + (Math.floor(timeS/60)+"m "+timeS%60+"s") + "</div>" +
         "</div>";
     }).join("");
