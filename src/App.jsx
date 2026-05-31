@@ -2453,153 +2453,6 @@ function AdminScreen({ onSignOut }) {
             )}
 
         {/* BRANDING TAB */}
-        {tab === "branding" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
-            {brandingMsg && <div style={mstyle(brandingMsg)}>{brandingMsg.text}</div>}
-
-            {/* Live Preview */}
-            <div style={{ ...acard, padding:0, overflow:"hidden" }}>
-              <div style={{ padding:"10px 16px", borderBottom:"1px solid rgba(255,255,255,0.08)", color:"#a5b4fc", fontWeight:700, fontSize:12, textTransform:"uppercase" }}>Live Preview</div>
-              <div style={{ height:160, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:8,
-                ...( brandingForm.bg_type === "solid" ? { background: brandingForm.bg_solid_color || "#0f172a" }
-                   : brandingForm.bg_type === "image" && brandingForm.bg_image_data ? { backgroundImage:"url("+brandingForm.bg_image_data+")", backgroundSize:"cover", backgroundPosition:"center" }
-                   : { background:"linear-gradient(135deg,"+(brandingForm.bg_gradient_from||"#0f0c29")+" 0%,"+(brandingForm.bg_gradient_to||"#302b63")+" 100%)" }) }}>
-                {(brandingForm.logo_data || brandingForm.logo_url) && <img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:48, maxWidth:140, objectFit:"contain", borderRadius:4 }} />}
-                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:"#c084fc", letterSpacing:1 }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
-                <div style={{ color:"#fff", fontWeight:700, fontSize:"1.1rem" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
-                <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
-              </div>
-            </div>
-
-            {/* Logo */}
-            <div style={{ ...acard, padding:"18px 20px" }}>
-              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Logo</div>
-              <div style={{ display:"flex", gap:12, alignItems:"flex-start", flexWrap:"wrap" }}>
-                <div onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try { const {b64}=await compressToBase64(f); setBrandingForm(p=>({...p,logo_data:b64,logo_url:""})); setBrandingMsg({type:"ok",text:"Logo ready."}); } catch(ex){ setBrandingMsg({type:"error",text:ex.message}); } }; inp.click(); }}
-                  style={{ border:"2px dashed "+(brandingForm.logo_data||brandingForm.logo_url?"rgba(99,102,241,0.5)":"rgba(99,102,241,0.25)"), borderRadius:10, padding:brandingForm.logo_data?6:20, cursor:"pointer", textAlign:"center", minWidth:120 }}>
-                  {(brandingForm.logo_data||brandingForm.logo_url) ? (<img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:60, maxWidth:160, objectFit:"contain", display:"block", margin:"0 auto 6px" }} />) : (<div style={{ color:"#64748b", fontSize:12 }}>Click to upload logo</div>)}
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:8, flex:1 }}>
-                  {(brandingForm.logo_data||brandingForm.logo_url) && <button onClick={()=>setBrandingForm(p=>({...p,logo_data:"",logo_url:""}))} style={{ ...abtn("danger"), fontSize:12, padding:"6px 14px" }}>Remove Logo</button>}
-                  <div><label style={alabel}>Or paste image URL</label><input value={brandingForm.logo_url||""} onChange={e=>setBrandingForm(p=>({...p,logo_url:e.target.value,logo_data:""}))} placeholder="https://example.com/logo.png" style={{ ...ainput, fontSize:12 }} /></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Text */}
-            <div style={{ ...acard, padding:"18px 20px" }}>
-              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Text</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                <div><label style={alabel}>Platform Name</label><input value={brandingForm.platform_name||""} onChange={e=>setBrandingForm(p=>({...p,platform_name:e.target.value}))} placeholder="Mock Test Platform" style={ainput} /></div>
-                <div><label style={alabel}>Tagline</label><input value={brandingForm.platform_tagline||""} onChange={e=>setBrandingForm(p=>({...p,platform_tagline:e.target.value}))} placeholder="Select your role to continue" style={ainput} /></div>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                  <div style={{ color:"#e2e8f0", fontSize:13 }}>Show Badge</div>
-                  <button onClick={()=>setBrandingForm(p=>({...p,show_badge:p.show_badge==="false"?"true":"false"}))} style={{ ...abtn(brandingForm.show_badge!=="false"?"success":"ghost"), minWidth:60 }}>{brandingForm.show_badge!=="false"?"ON":"OFF"}</button>
-                </div>
-                {brandingForm.show_badge !== "false" && <div><label style={alabel}>Badge Text</label><input value={brandingForm.badge_text||""} onChange={e=>setBrandingForm(p=>({...p,badge_text:e.target.value}))} placeholder="NTA NEET UG 2025" style={ainput} /></div>}
-              </div>
-            </div>
-
-            {/* Background */}
-            <div style={{ ...acard, padding:"18px 20px" }}>
-              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Background</div>
-              <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
-                {["gradient","solid","image"].map(t => (
-                  <button key={t} onClick={()=>setBrandingForm(p=>({...p,bg_type:t}))} style={{ ...abtn(brandingForm.bg_type===t?"primary":"ghost"), fontSize:12, padding:"7px 16px", textTransform:"capitalize" }}>{t}</button>
-                ))}
-              </div>
-              {(!brandingForm.bg_type || brandingForm.bg_type==="gradient") && (
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                  {[["bg_gradient_from","Gradient From","#0f0c29"],["bg_gradient_to","Gradient To","#302b63"]].map(([k,l,d]) => (
-                    <div key={k}><label style={alabel}>{l}</label>
-                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                        <input type="color" value={brandingForm[k]||d} onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))} style={{ width:44, height:36, borderRadius:8, border:"none", cursor:"pointer" }} />
-                        <input value={brandingForm[k]||d} onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))} style={{ ...ainput, flex:1, fontFamily:"monospace", fontSize:12 }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {brandingForm.bg_type === "solid" && (
-                <div><label style={alabel}>Background Color</label>
-                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    <input type="color" value={brandingForm.bg_solid_color||"#0f172a"} onChange={e=>setBrandingForm(p=>({...p,bg_solid_color:e.target.value}))} style={{ width:44, height:36, borderRadius:8, border:"none", cursor:"pointer" }} />
-                    <input value={brandingForm.bg_solid_color||"#0f172a"} onChange={e=>setBrandingForm(p=>({...p,bg_solid_color:e.target.value}))} style={{ ...ainput, flex:1, fontFamily:"monospace", fontSize:12 }} />
-                  </div>
-                </div>
-              )}
-              {brandingForm.bg_type === "image" && (
-                <div>
-                  <div onClick={()=>{ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>{ setBrandingForm(p=>({...p,bg_image_data:ev.target.result})); setBrandingMsg({type:"ok",text:"Image ready."}); }; r.readAsDataURL(f); }; inp.click(); }}
-                    style={{ border:"2px dashed rgba(99,102,241,0.3)", borderRadius:10, padding:16, cursor:"pointer", textAlign:"center", marginBottom:8 }}>
-                    {brandingForm.bg_image_data ? <div style={{ color:"#4ade80", fontSize:12 }}>Image loaded. Click to replace.</div> : <div style={{ color:"#64748b", fontSize:12 }}>Click to upload background image</div>}
-                  </div>
-                  {brandingForm.bg_image_data && <button onClick={()=>setBrandingForm(p=>({...p,bg_image_data:""}))} style={{ ...abtn("danger"), fontSize:11, padding:"5px 12px" }}>Remove Image</button>}
-                </div>
-              )}
-            </div>
-
-            <button onClick={saveBranding} disabled={brandingLoading} style={{ ...abtn("success"), padding:"13px", fontSize:"1rem", opacity:brandingLoading?0.6:1 }}>
-              {brandingLoading ? "Saving..." : "Save Branding"}
-            </button>
-            <div style={{ fontSize:12, color:"#475569", textAlign:"center" }}>Changes apply on next page load. Students see updated branding when they visit the site.</div>
-          </div>
-        )}
-
-            {/*  ANALYTICS TAB  */}
-        {tab === "analytics" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Question Analytics</div>
-                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Paper: <span style={{ color:"#fbbf24" }}>{paperFilter||"NEET_2025"}</span>  sorted hardest first</div>
-              </div>
-              <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("ghost")}>{analyticsLoading ? "Loading..." : "Refresh"}</button>
-            </div>
-            {analyticsLoading ? (
-              <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Calculating from {analyticsData?.total||0} attempts...</div>
-            ) : !analyticsData ? (
-              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>No data yet. Students need to attempt exams first.</div>
-            ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                {/* Header */}
-                <div style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5 }}>
-                  <div>Q#</div><div>Subject</div><div>Question</div>
-                  <div style={{ color:"#4ade80" }}>Correct</div>
-                  <div style={{ color:"#f87171" }}>Wrong</div>
-                  <div>Skip</div>
-                  <div style={{ color:"#fbbf24" }}>Accuracy</div>
-                </div>
-                {analyticsData.byQ.map((s, i) => {
-                  const acc = s.attempts > 0 ? Math.round(s.correct/s.attempts*100) : 0;
-                  const accColor = acc >= 70 ? "#4ade80" : acc >= 40 ? "#fbbf24" : "#f87171";
-                  return (
-                    <div key={s.q.id} style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
-                      <div style={{ color:"#818cf8", fontWeight:700, fontSize:12 }}>Q{s.q.number}</div>
-                      <div style={{ fontSize:10, color:"#94a3b8", background:"rgba(255,255,255,0.06)", borderRadius:4, padding:"2px 5px" }}>{s.q.subject.slice(0,4)}</div>
-                      <div style={{ fontSize:11, color:"#c7d2fe" }}>{(s.q.question_text||"").slice(0,55)}{(s.q.question_text||"").length>55?"...":""}</div>
-                      <div style={{ color:"#4ade80", fontWeight:600, fontSize:13 }}>{s.correct}</div>
-                      <div style={{ color:"#f87171", fontWeight:600, fontSize:13 }}>{s.wrong}</div>
-                      <div style={{ color:"#64748b", fontSize:13 }}>{s.skip}</div>
-                      <div>
-                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                          <div style={{ flex:1, height:5, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
-                            <div style={{ height:"100%", borderRadius:99, background:accColor, width:acc+"%" }} />
-                          </div>
-                          <span style={{ color:accColor, fontWeight:700, fontSize:11, minWidth:32 }}>{acc}%</span>
-                        </div>
-                        <div style={{ fontSize:9, color:"#475569", marginTop:1 }}>{s.attempts} attempts</div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
-                  Based on {analyticsData.total} exam attempts. Sorted: lowest accuracy (hardest) first.
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
             {/* STUDENT REPORT CARD SUB-TAB */}
             {studentTab === "studentcard" && (
@@ -2764,6 +2617,149 @@ function AdminScreen({ onSignOut }) {
             )}
           </div>
         )}
+        {tab === "analytics" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Question Analytics</div>
+                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Paper: <span style={{ color:"#fbbf24" }}>{paperFilter||"NEET_2025"}</span>  sorted hardest first</div>
+              </div>
+              <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("ghost")}>{analyticsLoading ? "Loading..." : "Refresh"}</button>
+            </div>
+            {analyticsLoading ? (
+              <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Calculating from {analyticsData?.total||0} attempts...</div>
+            ) : !analyticsData ? (
+              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>No data yet. Students need to attempt exams first.</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                {/* Header */}
+                <div style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5 }}>
+                  <div>Q#</div><div>Subject</div><div>Question</div>
+                  <div style={{ color:"#4ade80" }}>Correct</div>
+                  <div style={{ color:"#f87171" }}>Wrong</div>
+                  <div>Skip</div>
+                  <div style={{ color:"#fbbf24" }}>Accuracy</div>
+                </div>
+                {analyticsData.byQ.map((s, i) => {
+                  const acc = s.attempts > 0 ? Math.round(s.correct/s.attempts*100) : 0;
+                  const accColor = acc >= 70 ? "#4ade80" : acc >= 40 ? "#fbbf24" : "#f87171";
+                  return (
+                    <div key={s.q.id} style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
+                      <div style={{ color:"#818cf8", fontWeight:700, fontSize:12 }}>Q{s.q.number}</div>
+                      <div style={{ fontSize:10, color:"#94a3b8", background:"rgba(255,255,255,0.06)", borderRadius:4, padding:"2px 5px" }}>{s.q.subject.slice(0,4)}</div>
+                      <div style={{ fontSize:11, color:"#c7d2fe" }}>{(s.q.question_text||"").slice(0,55)}{(s.q.question_text||"").length>55?"...":""}</div>
+                      <div style={{ color:"#4ade80", fontWeight:600, fontSize:13 }}>{s.correct}</div>
+                      <div style={{ color:"#f87171", fontWeight:600, fontSize:13 }}>{s.wrong}</div>
+                      <div style={{ color:"#64748b", fontSize:13 }}>{s.skip}</div>
+                      <div>
+                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <div style={{ flex:1, height:5, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
+                            <div style={{ height:"100%", borderRadius:99, background:accColor, width:acc+"%" }} />
+                          </div>
+                          <span style={{ color:accColor, fontWeight:700, fontSize:11, minWidth:32 }}>{acc}%</span>
+                        </div>
+                        <div style={{ fontSize:9, color:"#475569", marginTop:1 }}>{s.attempts} attempts</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
+                  Based on {analyticsData.total} exam attempts. Sorted: lowest accuracy (hardest) first.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "branding" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+            {brandingMsg && <div style={mstyle(brandingMsg)}>{brandingMsg.text}</div>}
+             {/* Live Preview */}
+            <div style={{ ...acard, padding:0, overflow:"hidden" }}>
+              <div style={{ padding:"10px 16px", borderBottom:"1px solid rgba(255,255,255,0.08)", color:"#a5b4fc", fontWeight:700, fontSize:12, textTransform:"uppercase" }}>Live Preview</div>
+              <div style={{ height:160, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:8,
+                ...( brandingForm.bg_type === "solid" ? { background: brandingForm.bg_solid_color || "#0f172a" }
+                   : brandingForm.bg_type === "image" && brandingForm.bg_image_data ? { backgroundImage:"url("+brandingForm.bg_image_data+")", backgroundSize:"cover", backgroundPosition:"center" }
+                   : { background:"linear-gradient(135deg,"+(brandingForm.bg_gradient_from||"#0f0c29")+" 0%,"+(brandingForm.bg_gradient_to||"#302b63")+" 100%)" }) }}>
+                {(brandingForm.logo_data || brandingForm.logo_url) && <img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:48, maxWidth:140, objectFit:"contain", borderRadius:4 }} />}
+                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:"#c084fc", letterSpacing:1 }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
+                <div style={{ color:"#fff", fontWeight:700, fontSize:"1.1rem" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
+                <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
+              </div>
+            </div>
+             {/* Logo */}
+            <div style={{ ...acard, padding:"18px 20px" }}>
+              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Logo</div>
+              <div style={{ display:"flex", gap:12, alignItems:"flex-start", flexWrap:"wrap" }}>
+                <div onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try { const {b64}=await compressToBase64(f); setBrandingForm(p=>({...p,logo_data:b64,logo_url:""})); setBrandingMsg({type:"ok",text:"Logo ready."}); } catch(ex){ setBrandingMsg({type:"error",text:ex.message}); } }; inp.click(); }}
+                  style={{ border:"2px dashed "+(brandingForm.logo_data||brandingForm.logo_url?"rgba(99,102,241,0.5)":"rgba(99,102,241,0.25)"), borderRadius:10, padding:brandingForm.logo_data?6:20, cursor:"pointer", textAlign:"center", minWidth:120 }}>
+                  {(brandingForm.logo_data||brandingForm.logo_url) ? (<img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:60, maxWidth:160, objectFit:"contain", display:"block", margin:"0 auto 6px" }} />) : (<div style={{ color:"#64748b", fontSize:12 }}>Click to upload logo</div>)}
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8, flex:1 }}>
+                  {(brandingForm.logo_data||brandingForm.logo_url) && <button onClick={()=>setBrandingForm(p=>({...p,logo_data:"",logo_url:""}))} style={{ ...abtn("danger"), fontSize:12, padding:"6px 14px" }}>Remove Logo</button>}
+                  <div><label style={alabel}>Or paste image URL</label><input value={brandingForm.logo_url||""} onChange={e=>setBrandingForm(p=>({...p,logo_url:e.target.value,logo_data:""}))} placeholder="https://example.com/logo.png" style={{ ...ainput, fontSize:12 }} /></div>
+                </div>
+              </div>
+            </div>
+             {/* Text */}
+            <div style={{ ...acard, padding:"18px 20px" }}>
+              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Text</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div><label style={alabel}>Platform Name</label><input value={brandingForm.platform_name||""} onChange={e=>setBrandingForm(p=>({...p,platform_name:e.target.value}))} placeholder="Mock Test Platform" style={ainput} /></div>
+                <div><label style={alabel}>Tagline</label><input value={brandingForm.platform_tagline||""} onChange={e=>setBrandingForm(p=>({...p,platform_tagline:e.target.value}))} placeholder="Select your role to continue" style={ainput} /></div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div style={{ color:"#e2e8f0", fontSize:13 }}>Show Badge</div>
+                  <button onClick={()=>setBrandingForm(p=>({...p,show_badge:p.show_badge==="false"?"true":"false"}))} style={{ ...abtn(brandingForm.show_badge!=="false"?"success":"ghost"), minWidth:60 }}>{brandingForm.show_badge!=="false"?"ON":"OFF"}</button>
+                </div>
+                {brandingForm.show_badge !== "false" && <div><label style={alabel}>Badge Text</label><input value={brandingForm.badge_text||""} onChange={e=>setBrandingForm(p=>({...p,badge_text:e.target.value}))} placeholder="NTA NEET UG 2025" style={ainput} /></div>}
+              </div>
+            </div>
+             {/* Background */}
+            <div style={{ ...acard, padding:"18px 20px" }}>
+              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Background</div>
+              <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+                {["gradient","solid","image"].map(t => (
+                  <button key={t} onClick={()=>setBrandingForm(p=>({...p,bg_type:t}))} style={{ ...abtn(brandingForm.bg_type===t?"primary":"ghost"), fontSize:12, padding:"7px 16px", textTransform:"capitalize" }}>{t}</button>
+                ))}
+              </div>
+              {(!brandingForm.bg_type || brandingForm.bg_type==="gradient") && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  {[["bg_gradient_from","Gradient From","#0f0c29"],["bg_gradient_to","Gradient To","#302b63"]].map(([k,l,d]) => (
+                    <div key={k}><label style={alabel}>{l}</label>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <input type="color" value={brandingForm[k]||d} onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))} style={{ width:44, height:36, borderRadius:8, border:"none", cursor:"pointer" }} />
+                        <input value={brandingForm[k]||d} onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))} style={{ ...ainput, flex:1, fontFamily:"monospace", fontSize:12 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {brandingForm.bg_type === "solid" && (
+                <div><label style={alabel}>Background Color</label>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <input type="color" value={brandingForm.bg_solid_color||"#0f172a"} onChange={e=>setBrandingForm(p=>({...p,bg_solid_color:e.target.value}))} style={{ width:44, height:36, borderRadius:8, border:"none", cursor:"pointer" }} />
+                    <input value={brandingForm.bg_solid_color||"#0f172a"} onChange={e=>setBrandingForm(p=>({...p,bg_solid_color:e.target.value}))} style={{ ...ainput, flex:1, fontFamily:"monospace", fontSize:12 }} />
+                  </div>
+                </div>
+              )}
+              {brandingForm.bg_type === "image" && (
+                <div>
+                  <div onClick={()=>{ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>{ setBrandingForm(p=>({...p,bg_image_data:ev.target.result})); setBrandingMsg({type:"ok",text:"Image ready."}); }; r.readAsDataURL(f); }; inp.click(); }}
+                    style={{ border:"2px dashed rgba(99,102,241,0.3)", borderRadius:10, padding:16, cursor:"pointer", textAlign:"center", marginBottom:8 }}>
+                    {brandingForm.bg_image_data ? <div style={{ color:"#4ade80", fontSize:12 }}>Image loaded. Click to replace.</div> : <div style={{ color:"#64748b", fontSize:12 }}>Click to upload background image</div>}
+                  </div>
+                  {brandingForm.bg_image_data && <button onClick={()=>setBrandingForm(p=>({...p,bg_image_data:""}))} style={{ ...abtn("danger"), fontSize:11, padding:"5px 12px" }}>Remove Image</button>}
+                </div>
+              )}
+            </div>
+             <button onClick={saveBranding} disabled={brandingLoading} style={{ ...abtn("success"), padding:"13px", fontSize:"1rem", opacity:brandingLoading?0.6:1 }}>
+              {brandingLoading ? "Saving..." : "Save Branding"}
+            </button>
+            <div style={{ fontSize:12, color:"#475569", textAlign:"center" }}>Changes apply on next page load. Students see updated branding when they visit the site.</div>
+          </div>
+        )}
+             {/*  ANALYTICS TAB  */}
+
       </div>
     </div>
   );
