@@ -4,36 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NEET UG Mock Test Platform</title>
-
-    <!-- Branding: apply cached styles BEFORE React mounts — zero flash -->
-    <script>
-      (function() {
-        try {
-          var b = JSON.parse(localStorage.getItem('neet_branding_cache') || '{}');
-          var bg = '';
-          if (b.bg_type === 'solid' && b.bg_solid_color) {
-            bg = b.bg_solid_color;
-          } else if (b.bg_type === 'image' && b.bg_image_data) {
-            bg = 'url(' + b.bg_image_data + ') center/cover no-repeat';
-          } else if (b.bg_gradient_from && b.bg_gradient_to) {
-            bg = 'linear-gradient(135deg,' + b.bg_gradient_from + ' 0%,' + b.bg_gradient_to + ' 50%,' + b.bg_gradient_from + ' 100%)';
-          }
-          if (bg) document.documentElement.style.setProperty('--landing-bg', bg);
-        } catch(_) {}
-      })();
-    </script>
-
     <style>
-      /* Applied instantly before React JS even starts */
-      html, body, #root {
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
-      }
-      body {
-        background: var(--landing-bg, linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%));
-      }
+      html, body { margin: 0; padding: 0; min-height: 100vh; }
+      body { background: linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%); }
     </style>
+    <script>
+      try {
+        var b = JSON.parse(localStorage.getItem('neet_branding_cache') || 'null');
+        if (b) {
+          var bg = b.bg_type === 'solid' && b.bg_solid_color
+            ? b.bg_solid_color
+            : b.bg_gradient_from && b.bg_gradient_to
+            ? 'linear-gradient(135deg,' + b.bg_gradient_from + ' 0%,' + b.bg_gradient_to + ' 50%,' + b.bg_gradient_from + ' 100%)'
+            : '';
+          if (bg) document.body.style.background = bg;
+        }
+      } catch(e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
