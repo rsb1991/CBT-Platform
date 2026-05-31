@@ -708,7 +708,7 @@ function AdminScreen({ onSignOut }) {
         platform_tagline:"Select your role to continue", bg_type:"gradient",
         bg_gradient_from:"#0f0c29", bg_gradient_to:"#302b63",
         bg_solid_color:"#0f172a", bg_image_data:"", accent_color:"#7c3aed",
-        show_badge:"true", badge_text:"NTA NEET UG 2025",
+        show_badge:"true", badge_text:"NEET TEST PLATFORM",
         font_family:"Georgia, serif", title_color:"#ffffff",
         tagline_color:"#94a3b8", badge_color:"#c084fc", card_text_color:"#a5b4fc"
       };
