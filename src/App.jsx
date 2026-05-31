@@ -639,7 +639,6 @@ function AdminScreen({ onSignOut }) {
   const [batchMemberCsv,  setBatchMemberCsv]  = useState(null);
   const [batchView,       setBatchView]        = useState("list"); // list | edit | tests
   const [batchTests,      setBatchTests]       = useState([]);
-  const [batchTestView,   setBatchTestView]    = useState("list"); // list | edit
   const [selectedTest,    setSelectedTest]     = useState(null);
   const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" });
   const [batchTestView,   setBatchTestView]    = useState("list"); // list | create | edit | report
