@@ -3250,7 +3250,8 @@ function InstructionsScreen({ year, onBegin, onBack }) {
 // 
 const SUBJ_PAL_COLOR = { Physics:"#6366f1", Chemistry:"#f59e0b", Botany:"#22c55e", Zoology:"#f43f5e" };
 
-function Palette({ questions, answers, currentIdx, onJump, marked }) {
+function Palette({ questions, answers, currentIdx, onJump, marked, visited }) {
+  const vis = visited || new Set([currentIdx]);
   const getStatus = (q) => {
     const i   = questions.indexOf(q);
     const ans = answers[q.id] !== undefined;
@@ -3258,15 +3259,15 @@ function Palette({ questions, answers, currentIdx, onJump, marked }) {
     if (mk && ans) return "marked-answered";
     if (mk)        return "marked";
     if (ans)       return "answered";
-    if (i < currentIdx) return "not-answered";
-    return "not-visited";
+    if (vis.has(i) && !ans) return "not-answered"; // visited but unanswered = red
+    return "not-visited"; // never visited = dark gray
   };
 
   const counts = {
     a: questions.filter(q => answers[q.id] !== undefined && !marked.has(q.id)).length,
     m: questions.filter(q => marked.has(q.id)).length,
-    n: questions.filter((q,i) => answers[q.id] === undefined && i < currentIdx).length,
-    v: questions.filter((q,i) => i > currentIdx).length,
+    n: questions.filter((q,i) => vis.has(i) && answers[q.id] === undefined).length,
+    v: questions.filter((q,i) => !vis.has(i)).length,
   };
 
   return (
@@ -3345,6 +3346,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
   const [idx,           setIdx]          = useState(saved?.idx ?? 0);
   const [answers,       setAnswers]      = useState(saved?.answers ?? {});
   const [marked,        setMarked]       = useState(new Set(saved?.marked ?? []));
+  const [visited,       setVisited]      = useState(new Set(saved?.visited ?? [0])); // track actually visited question indices
   const [bookmarks,     setBookmarks]    = useState(new Set(saved?.bookmarks ?? []));
   const [sel,           setSel]          = useState(null);
   // Calculate time remaining: if window_end is set, timer counts down to that, else use TOTAL_TIME
@@ -3380,6 +3382,9 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
   const timerRef    = useRef(null);
   const webcamRef   = useRef(null);
   const q = questions[idx];
+
+  // Mark first question as visited on mount
+  useEffect(() => { setVisited(p => { const n = new Set(p); n.add(0); return n; }); }, []);
 
   // Lazy-load diagram images for current question on demand
   useEffect(() => {
@@ -3425,7 +3430,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         questionIds: questions.map(q => q.id),
-        idx, answers, marked: [...marked], bookmarks: [...bookmarks],
+        idx, answers, marked: [...marked], bookmarks: [...bookmarks], visited: [...visited],
         timeLeft, year, timePerQ: timePerQ.current,
         subjectTimes: subjectTimes.current, savedAt: Date.now(),
       }));
@@ -3538,7 +3543,10 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
     recordTime(idx);
     if (sel !== null) setAnswers(p => ({ ...p, [q.id]: sel }));
     const ni = idx + delta;
-    if (ni >= 0 && ni < questions.length) setIdx(ni);
+    if (ni >= 0 && ni < questions.length) {
+      setVisited(p => { const n = new Set(p); n.add(ni); return n; });
+      setIdx(ni);
+    }
   };
 
   const toggleBookmark = () => {
@@ -3759,7 +3767,9 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
           </div>
         </div>
 
-        <Palette questions={questions} answers={answers} currentIdx={idx} onJump={setIdx} marked={marked} />
+        <Palette questions={questions} answers={answers} currentIdx={idx}
+          onJump={i => { setVisited(p => { const n=new Set(p); n.add(i); return n; }); setIdx(i); }}
+          marked={marked} visited={visited} />
       </div>
 
      
