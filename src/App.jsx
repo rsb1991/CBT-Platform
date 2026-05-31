@@ -4038,7 +4038,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
 // 
 // RESULT SCREEN
 // 
-function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
+function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSignOut }) {
   const [expandId,    setExpandId]    = useState(null);
   const [filterSub,   setFilterSub]   = useState("All");
   const [filterStatus,setFilterStatus]= useState("All");
@@ -4154,7 +4154,11 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
     }).join("");
 
     const pdfTitle = meta?.testName || ("NEET " + year + " Mock Test");
-    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title><style>" +
+    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title>" +
+      "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css\">" +
+      "<script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js\"></scr" + "ipt>" +
+      "<script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js\"></scr" + "ipt>" +
+      "<style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
       "h2{color:#312e81;margin-top:28px}" +
@@ -4165,6 +4169,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
       "th{background:#312e81;color:#fff;padding:8px 10px;font-size:12px;text-align:left}" +
       "td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f3f4f6}" +
       "@media print{.noprint{display:none}}" +
+      ".katex{font-size:1em!important}" +
       "</style></head><body>" +
       "<h1>" + pdfTitle + " - Report</h1>" +
       "<p style='color:#6b7280;font-size:13px'>Generated on " + new Date().toLocaleString("en-IN") + "</p>" +
@@ -4183,6 +4188,19 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green border = correct &nbsp;|&nbsp; Red border = wrong &nbsp;|&nbsp; Gray border = unattempted</p>" +
       qRows +
       "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
+      "<scr" + "ipt>" +
+        "document.addEventListener('DOMContentLoaded', function() {" +
+          "if (window.renderMathInElement) {" +
+            "renderMathInElement(document.body, {" +
+              "delimiters: [" +
+                "{left:'$$',right:'$$',display:true}," +
+                "{left:'$',right:'$',display:false}" +
+              "]," +
+              "throwOnError: false" +
+            "});" +
+          "}" +
+        "});" +
+      "</scr" + "ipt>" +
       "</body></html>");
     win.document.close();
   };
@@ -4203,9 +4221,16 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
           <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>{meta?.testName || ("Test Completed - NEET " + year)}</h2>
           <p style={{ color: "#818cf8", margin: 0, fontSize: 14 }}>Detailed Performance Analysis</p>
         </div>
-        <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
-          Download PDF Report
-        </button>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
+            Download PDF Report
+          </button>
+          {onSignOut && (
+            <button onClick={onSignOut} style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.3)", color:"#f87171", borderRadius:8, padding:"9px 18px", cursor:"pointer", fontSize:13, fontFamily:"inherit" }}>
+              Sign Out
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "22px 16px" }}>
@@ -5004,7 +5029,8 @@ export default function App() {
       {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} />}
       {screen === SCREEN.RESULT       && (
         <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta}
-          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }} />
+          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }}
+          onSignOut={handleSignOut} />
       )}
     </>
   );
