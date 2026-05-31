@@ -599,7 +599,7 @@ const abtn = (v) => {
 const ainput = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", color: "#e2e8f0", fontSize: "0.92rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
 const alabel = { color: "#94a3b8", fontSize: 11, display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 };
 const acard  = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 };
-const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "" });
+const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "", paper_id: "NEET_2025", chapter: "", difficulty: "medium" });
 const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Botany: "#22c55e", Zoology: "#f43f5e" };
 
 // Helper mini-components for admin
@@ -835,7 +835,7 @@ function AdminScreen({ onSignOut }) {
       question_text: form.question_text, equation: form.equation,
       diagram_data: form.diagram_data, diagram_url: "",
       option_a: form.option_a, option_b: form.option_b, option_c: form.option_c, option_d: form.option_d,
-      correct: +form.correct, solution_text: form.solution_text, solution_eq: form.solution_eq, solution_diagram_data: form.solution_diagram_data || "", paper_id: "NEET_2025",
+      correct: +form.correct, solution_text: form.solution_text, solution_eq: form.solution_eq, solution_diagram_data: form.solution_diagram_data || "", paper_id: form.paper_id || "NEET_2025", chapter: form.chapter || "", difficulty: form.difficulty || "medium",
     };
     const { error } = editId
       ? await supabase.from("questions").update(payload).eq("id", editId)
@@ -851,7 +851,7 @@ function AdminScreen({ onSignOut }) {
 
   //  Edit question 
   const handleEdit = (q) => {
-    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "" });
+    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "", paper_id: q.paper_id || "NEET_2025", chapter: q.chapter || "", difficulty: q.difficulty || "medium" });
     setImgInfo(q.diagram_data ? { kb: Math.round(q.diagram_data.length * 0.75 / 1024) } : null);
     setEditId(q.id); setTab("add");
   };
@@ -1079,7 +1079,20 @@ function AdminScreen({ onSignOut }) {
       .select("*")
       .eq("batch_id", batchId)
       .order("created_at", { ascending: false });
-    setBatchTests(data || []);
+    if (data) {
+      // Fetch question counts per paper_id
+      const paperIds = [...new Set(data.map(t => t.paper_id).filter(Boolean))];
+      const counts = {};
+      await Promise.all(paperIds.map(async pid => {
+        const { count } = await supabase.from("questions")
+          .select("id", { count: "exact", head: true })
+          .eq("paper_id", pid);
+        counts[pid] = count || 0;
+      }));
+      setBatchTests(data.map(t => ({ ...t, _qCount: counts[t.paper_id] ?? null })));
+    } else {
+      setBatchTests([]);
+    }
     setTestLoading(false);
   };
 
@@ -1408,7 +1421,7 @@ function AdminScreen({ onSignOut }) {
                 <button onClick={() => { setForm(aempty()); setEditId(null); setImgInfo(null); }} style={abtn("sm")}>Cancel</button>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 12 }}>
               <div>
                 <label style={alabel}>Q Number</label>
                 <input type="number" min="1" max="180" value={form.number} onChange={e => ff("number", e.target.value)} placeholder="e.g. 5" style={ainput} />
@@ -1417,6 +1430,25 @@ function AdminScreen({ onSignOut }) {
                 <label style={alabel}>Subject</label>
                 <select value={form.subject} onChange={e => ff("subject", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
                   {SUBJECTS.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={alabel}>Paper ID</label>
+                <input value={form.paper_id || "NEET_2025"} onChange={e => ff("paper_id", e.target.value)} placeholder="e.g. NEET_2025, BATCH_A" style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
+                <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>Which test set this belongs to</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={alabel}>Chapter (optional)</label>
+                <input value={form.chapter || ""} onChange={e => ff("chapter", e.target.value)} placeholder="e.g. Kinematics, Optics" style={ainput} />
+              </div>
+              <div>
+                <label style={alabel}>Difficulty</label>
+                <select value={form.difficulty || "medium"} onChange={e => ff("difficulty", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
                 </select>
               </div>
             </div>
@@ -1947,13 +1979,16 @@ function AdminScreen({ onSignOut }) {
                                   </div>
                                   {t.description && <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>{t.description}</div>}
                                   <div style={{ color:"#475569", fontSize:11, marginTop:4, display:"flex", gap:14, flexWrap:"wrap" }}>
-                                    <span>Paper: <span style={{ color:"#a5b4fc" }}>{t.paper_id}</span></span>
+                                    <span>Paper: <span style={{ color:"#a5b4fc" }}>{t.paper_id}</span>
+                                    {t._qCount != null && <span style={{ marginLeft:6, color:t._qCount>0?"#4ade80":"#f87171", fontWeight:600, fontSize:11 }}>({t._qCount} Qs)</span>}
+                                    </span>
                                     {st && <span>Start: {st.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
                                     {en && <span>End: {en.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
                                   </div>
                                 </div>
                                 <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                                   <button onClick={() => { setSelectedTest(t); loadTestReports(t.id); setBatchTestView("report"); }} style={{ ...abtn("primary"), padding:"7px 12px", fontSize:12 }}>Report</button>
+                                  <button onClick={() => { setPaperFilter(t.paper_id); setTab("list"); loadAll(t.paper_id); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Questions</button>
                                   <button onClick={() => { setSelectedTest(t); setTestForm({ name:t.name, description:t.description||"", paper_id:t.paper_id, exam_window_start:t.exam_window_start||"", exam_window_end:t.exam_window_end||"", attempt_limit:String(t.attempt_limit||"1"), access_code:t.access_code||"", access_code_enabled:t.access_code_enabled||"false", resume_code:t.resume_code||"", status:t.status||"scheduled", manual_release:t.manual_release||"false" }); setBatchTestView("edit"); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Edit</button>
                                   <button onClick={() => deleteTest(t.id)} style={{ ...abtn("danger"), padding:"7px 10px", fontSize:12 }}>Del</button>
                                 </div>
