@@ -1335,8 +1335,10 @@ function AdminScreen({ onSignOut }) {
     for (const entry of entries) {
       await supabase.from("branding").upsert(entry, { onConflict: "key" });
     }
+    // Update localStorage cache so next visit shows updated branding instantly
+    try { localStorage.setItem("neet_branding_cache", JSON.stringify(brandingForm)); } catch (_) {}
     setBrandingLoading(false);
-    setBrandingMsg({ type: "ok", text: "Branding saved! Reload the landing page to see changes." });
+    setBrandingMsg({ type: "ok", text: "Branding saved! Changes are live on the landing page." });
   };
 
   //  Styles 
@@ -4433,8 +4435,16 @@ export default function App() {
   const [finalAnswers, setFinalAnswers] = useState({});
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
   const [activeTest,   setActiveTest]   = useState(null); // {batch_test_id, batch_id, test_name}
-  const [branding,     setBranding]     = useState({});  // logo, bg, colors from DB
-  const [brandingReady,setBrandingReady]= useState(false); // don't render landing until branding loaded
+  // Load branding from localStorage cache instantly (no flash/blank screen)
+  const [branding,     setBranding]     = useState(() => {
+    try {
+      const cached = localStorage.getItem("neet_branding_cache");
+      return cached ? JSON.parse(cached) : {};
+    } catch (_) { return {}; }
+  });
+  const [brandingReady,setBrandingReady]= useState(() => {
+    try { return !!localStorage.getItem("neet_branding_cache"); } catch (_) { return false; }
+  });
   const [examWindowEnd, setExamWindowEnd] = useState(null); // ISO string of window end for auto-submit
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
@@ -4863,9 +4873,8 @@ export default function App() {
         }
       `}</style>
 
-      {screen === SCREEN.LANDING     && (brandingReady
-        ? <LandingScreen onStudent={() => setScreen(SCREEN.AUTH)} onAdmin={() => setScreen(SCREEN.ADMIN_AUTH)} branding={branding} />
-        : <div style={{ minHeight:"100vh", background:"#0f0c29" }} />
+      {screen === SCREEN.LANDING     && (
+        <LandingScreen onStudent={() => setScreen(SCREEN.AUTH)} onAdmin={() => setScreen(SCREEN.ADMIN_AUTH)} branding={branding} />
       )}
       {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} />}
       {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} />}
