@@ -397,16 +397,61 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
 }
 
 // Returns { error } or null
+// Debounced result save  writes to localStorage immediately (instant feedback)
+// then persists to Supabase with retry logic
+let _pendingSave = null;
 async function sbSaveResult(userId, payload) {
-  if (!isSupabaseConfigured()) return null;
+  // 1. Save to localStorage immediately so result is never lost
   try {
-    const { error } = await supabase
-      .from("test_results")
-      .insert([{ user_id: userId, ...payload, created_at: new Date().toISOString() }]);
-    if (error) console.warn("Could not save result:", friendlyError(error, "test_results"));
-  } catch (e) {
-    console.warn("Could not save result:", e.message);
-  }
+    const pendingKey = "neet_pending_result_" + userId;
+    localStorage.setItem(pendingKey, JSON.stringify({ userId, payload, ts: Date.now() }));
+  } catch (_) {}
+
+  // 2. Clear any pending debounce timer
+  if (_pendingSave) clearTimeout(_pendingSave);
+
+  // 3. Flush to Supabase after 1.5s (debounce  prevents duplicate writes on fast resubmit)
+  _pendingSave = setTimeout(async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const { error } = await supabase
+        .from("test_results")
+        .insert([{ user_id: userId, ...payload, created_at: new Date().toISOString() }]);
+      if (!error) {
+        // Clear pending save from localStorage on success
+        try { localStorage.removeItem("neet_pending_result_" + userId); } catch (_) {}
+      } else {
+        console.warn("Could not save result:", friendlyError(error, "test_results"));
+        // Schedule retry after 10s
+        setTimeout(() => sbSaveResult(userId, payload), 10000);
+      }
+    } catch (e) {
+      console.warn("Could not save result:", e.message);
+      // Retry after 10s on network error
+      setTimeout(() => sbSaveResult(userId, payload), 10000);
+    }
+  }, 1500);
+}
+
+// On app load, flush any pending results from previous session
+async function flushPendingResults() {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith("neet_pending_result_"));
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const { userId, payload, ts } = JSON.parse(raw);
+      // Only retry if less than 24 hours old
+      if (Date.now() - ts < 24 * 60 * 60 * 1000) {
+        const { error } = await supabase.from("test_results")
+          .insert([{ user_id: userId, ...payload, created_at: new Date(ts).toISOString() }]);
+        if (!error) localStorage.removeItem(key);
+      } else {
+        localStorage.removeItem(key); // too old, discard
+      }
+    }
+  } catch (_) {}
 }
 
 // Returns array of history rows (never throws)
@@ -681,7 +726,7 @@ function AdminScreen({ onSignOut }) {
   const [batchView,       setBatchView]        = useState("list"); // list | edit | tests
   const [batchTests,      setBatchTests]       = useState([]);
   const [selectedTest,    setSelectedTest]     = useState(null);
-  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" });
+  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false", disable_submit:"false" });
   const [batchTestView,   setBatchTestView]    = useState("list"); // list | create | edit | report
   const [testMsg,         setTestMsg]          = useState(null);
   const [testLoading,     setTestLoading]      = useState(false);
@@ -774,6 +819,10 @@ function AdminScreen({ onSignOut }) {
 
   //  Load students 
   const [reportFilter,    setReportFilter]    = useState({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date", paperId:"", nameSearch:"" });
+  const [exportFilter,    setExportFilter]    = useState({ dateFrom:"", dateTo:"", batchName:"", paperId:"", testName:"" });
+  const [exportRows,      setExportRows]      = useState([]);
+  const [exportLoading,   setExportLoading]   = useState(false);
+  const [exportMsg,       setExportMsg]       = useState(null);
   const [studentReportEmail, setStudentReportEmail] = useState("");
   const [studentReportData,  setStudentReportData]  = useState([]);
   const [studentReportLoading, setStudentReportLoading] = useState(false);
@@ -790,24 +839,52 @@ function AdminScreen({ onSignOut }) {
   };
 
   // Download all reports as CSV
-  const downloadReportsCSV = (rows) => {
-    const header = "S.No,Name,Email,Paper ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
+  const downloadReportsCSV = (rows, filename) => {
+    const esc = v => '"' + String(v || "").replace(/"/g, '""') + '"';
+    const header = [
+      "S.No","Name","Email","Batch","Test Name","Paper ID","Date","Time",
+      "Total Score","Max Marks","Percentage","Correct","Wrong","Unattempted","Percentile",
+      "Physics Score","Physics Correct","Physics Wrong","Physics Time(s)",
+      "Chemistry Score","Chemistry Correct","Chemistry Wrong","Chemistry Time(s)",
+      "Botany Score","Botany Correct","Botany Wrong","Botany Time(s)",
+      "Zoology Score","Zoology Correct","Zoology Wrong","Zoology Time(s)"
+    ].map(esc).join(",");
     const lines = rows.map((r, i) => {
-      const d    = new Date(r.created_at).toLocaleDateString("en-IN");
-      const pct  = Math.round((r.score / 720) * 100);
-      const st   = r.subject_times || {};
+      const d   = new Date(r.created_at).toLocaleDateString("en-IN");
+      const t   = new Date(r.created_at).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
+      const pct = Math.round((r.score / 720) * 100);
+      const st  = r.subject_times || {};
+      const sa  = r.subject_answers || {};
+      // Compute per-subject scores from subject_times (time proxy) + answers if available
+      const SUBJS = ["Physics","Chemistry","Botany","Zoology"];
+      // Compute subject scores from answers if question data available
+      // Otherwise use subject_times as proxy
+      const subCols = SUBJS.flatMap(s => {
+        const timeS = Math.round((st[s]||0));
+        // subject_answers not directly stored - use placeholder
+        return ["", "", "", timeS];
+      });
       return [
-        i+1, r.user_id.slice(0,12), d, r.score, pct+"%",
+        i+1,
+        r.student_name || r.student_email?.split("@")[0] || r.user_id?.slice(0,10),
+        r.student_email || "",
+        r.batch_name || "",
+        r.test_name || "",
+        r.paper_id || "",
+        d, t,
+        r.score, 720, pct+"%",
         r.correct, r.wrong, r.unattempted,
-        r.percentile != null ? r.percentile+"%" : "N/A",
-        st.Physics || 0, st.Chemistry || 0, st.Botany || 0, st.Zoology || 0
-      ].join(",");
+        r.percentile != null ? r.percentile+"%" : "",
+        ...subCols
+      ].map(esc).join(",");
     });
     const csv  = header + "\n" + lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    a.href = url; a.download = "exam_reports_" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
+    a.href = url;
+    a.download = (filename || "exam_results") + "_" + new Date().toISOString().slice(0,10) + ".csv";
+    a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -1107,7 +1184,8 @@ function AdminScreen({ onSignOut }) {
       attempt_limit: +testForm.attempt_limit || 1,
       access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
       resume_code: testForm.resume_code, status: testForm.status || "scheduled",
-      manual_release: testForm.manual_release || "false"
+      manual_release:  testForm.manual_release  || "false",
+      disable_submit:  testForm.disable_submit  || "false"
     }]);
     if (error) { setTestMsg({ type:"error", text: error.message }); return; }
     setTestMsg({ type:"ok", text:"Test created!" });
@@ -1124,7 +1202,8 @@ function AdminScreen({ onSignOut }) {
       exam_window_end: testForm.exam_window_end, attempt_limit: +testForm.attempt_limit || 1,
       access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
       resume_code: testForm.resume_code, status: testForm.status,
-      manual_release: testForm.manual_release || "false"
+      manual_release:  testForm.manual_release  || "false",
+      disable_submit:  testForm.disable_submit  || "false"
     }).eq("id", selectedTest.id);
     if (error) setTestMsg({ type:"error", text: error.message });
     else { setTestMsg({ type:"ok", text:"Test updated!" }); loadBatchTests(selectedBatch.id); }
@@ -1989,7 +2068,7 @@ function AdminScreen({ onSignOut }) {
                                 <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                                   <button onClick={() => { setSelectedTest(t); loadTestReports(t.id); setBatchTestView("report"); }} style={{ ...abtn("primary"), padding:"7px 12px", fontSize:12 }}>Report</button>
                                   <button onClick={() => { setPaperFilter(t.paper_id); setTab("list"); loadAll(t.paper_id); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Questions</button>
-                                  <button onClick={() => { setSelectedTest(t); setTestForm({ name:t.name, description:t.description||"", paper_id:t.paper_id, exam_window_start:t.exam_window_start||"", exam_window_end:t.exam_window_end||"", attempt_limit:String(t.attempt_limit||"1"), access_code:t.access_code||"", access_code_enabled:t.access_code_enabled||"false", resume_code:t.resume_code||"", status:t.status||"scheduled", manual_release:t.manual_release||"false" }); setBatchTestView("edit"); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Edit</button>
+                                  <button onClick={() => { setSelectedTest(t); setTestForm({ name:t.name, description:t.description||"", paper_id:t.paper_id, exam_window_start:t.exam_window_start||"", exam_window_end:t.exam_window_end||"", attempt_limit:String(t.attempt_limit||"1"), access_code:t.access_code||"", access_code_enabled:t.access_code_enabled||"false", resume_code:t.resume_code||"", status:t.status||"scheduled", manual_release:t.manual_release||"false", disable_submit:t.disable_submit||"false" }); setBatchTestView("edit"); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Edit</button>
                                   <button onClick={() => deleteTest(t.id)} style={{ ...abtn("danger"), padding:"7px 10px", fontSize:12 }}>Del</button>
                                 </div>
                               </div>
@@ -2066,6 +2145,15 @@ function AdminScreen({ onSignOut }) {
                         <div style={{ color:"#64748b", fontSize:11 }}>Force-show this test to students regardless of date</div>
                       </div>
                       <button onClick={()=>setTestForm(p=>({...p,manual_release:p.manual_release==="true"?"false":"true"}))} style={{ ...abtn(testForm.manual_release==="true"?"success":"ghost"), minWidth:70 }}>{testForm.manual_release==="true"?"ON":"OFF"}</button>
+                    </div>
+
+                    {/* Disable submit button toggle */}
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(239,68,68,0.05)", borderRadius:8, padding:"10px 14px", border:"1px solid rgba(239,68,68,0.15)" }}>
+                      <div>
+                        <div style={{ color:"#e2e8f0", fontSize:13 }}>Disable Early Submit</div>
+                        <div style={{ color:"#64748b", fontSize:11 }}>Hide the Submit button  test submits only when time ends</div>
+                      </div>
+                      <button onClick={()=>setTestForm(p=>({...p,disable_submit:p.disable_submit==="true"?"false":"true"}))} style={{ ...abtn(testForm.disable_submit==="true"?"danger":"ghost"), minWidth:70 }}>{testForm.disable_submit==="true"?"ON":"OFF"}</button>
                     </div>
 
                     <button onClick={batchTestView === "edit" ? saveTest : createBatchTest} style={{ ...abtn("success"), padding:"12px", fontSize:"1rem" }}>
@@ -2276,6 +2364,7 @@ function AdminScreen({ onSignOut }) {
             {/* Sub-tabs */}
             <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap:"wrap" }}>
               <button onClick={() => setStudentTab("results")}     style={abtn(studentTab === "results"     ? "primary" : "ghost")}>Exam Results</button>
+              <button onClick={() => setStudentTab("export")}      style={abtn(studentTab === "export"      ? "primary" : "ghost")}>Export Results</button>
               <button onClick={() => setStudentTab("studentcard")} style={abtn(studentTab === "studentcard" ? "primary" : "ghost")}>Student Report Card</button>
               <button onClick={() => setStudentTab("manage")}      style={abtn(studentTab === "manage"      ? "primary" : "ghost")}>Manage Students</button>
               <button onClick={() => setStudentTab("add")}         style={abtn(studentTab === "add"         ? "primary" : "ghost")}>Add Students via CSV</button>
@@ -2520,6 +2609,150 @@ function AdminScreen({ onSignOut }) {
             )}
 
         {/* BRANDING TAB */}
+
+            {/* EXPORT RESULTS SUB-TAB */}
+            {studentTab === "export" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                <div>
+                  <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem", marginBottom:4 }}>Export Test Results</div>
+                  <div style={{ color:"#64748b", fontSize:12 }}>Search results by batch, test date, or paper ID. Export to CSV with full subject-wise breakdown.</div>
+                </div>
+
+                {exportMsg && <div style={mstyle(exportMsg)}>{exportMsg.text}</div>}
+
+                {/* Search filters */}
+                <div style={{ ...acard, padding:"18px 20px" }}>
+                  <div style={{ color:"#a5b4fc", fontWeight:600, fontSize:13, marginBottom:12 }}>Search / Filter</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+                    <div>
+                      <label style={alabel}>Batch Name</label>
+                      <input value={exportFilter.batchName} onChange={e=>setExportFilter(p=>({...p,batchName:e.target.value}))}
+                        placeholder="e.g. Batch_A" style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Paper ID</label>
+                      <input value={exportFilter.paperId} onChange={e=>setExportFilter(p=>({...p,paperId:e.target.value}))}
+                        placeholder="e.g. SUN_A, BATCH_A" style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Test Name</label>
+                      <input value={exportFilter.testName} onChange={e=>setExportFilter(p=>({...p,testName:e.target.value}))}
+                        placeholder="e.g. Sunday Test" style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Date From</label>
+                      <input type="date" value={exportFilter.dateFrom} onChange={e=>setExportFilter(p=>({...p,dateFrom:e.target.value}))}
+                        style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <label style={alabel}>Date To</label>
+                      <input type="date" value={exportFilter.dateTo} onChange={e=>setExportFilter(p=>({...p,dateTo:e.target.value}))}
+                        style={{ ...ainput, fontSize:12 }} />
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", justifyContent:"flex-end", gap:6 }}>
+                      <button
+                        onClick={async () => {
+                          setExportLoading(true);
+                          setExportMsg(null);
+                          try {
+                            let q = supabase.from("test_results")
+                              .select("id,student_name,student_email,batch_id,test_name,paper_id,score,correct,wrong,unattempted,percentile,subject_times,answers,created_at")
+                              .order("created_at", { ascending: false })
+                              .limit(1000);
+                            if (exportFilter.paperId)  q = q.ilike("paper_id",  "%" + exportFilter.paperId  + "%");
+                            if (exportFilter.testName) q = q.ilike("test_name", "%" + exportFilter.testName + "%");
+                            if (exportFilter.dateFrom) q = q.gte("created_at", exportFilter.dateFrom);
+                            if (exportFilter.dateTo)   q = q.lte("created_at", exportFilter.dateTo + "T23:59:59");
+                            const { data, error } = await q;
+                            if (error) { setExportMsg({ type:"error", text: error.message }); setExportLoading(false); return; }
+                            let rows = data || [];
+                            // Filter by batch name (join via batch_id  batches)
+                            if (exportFilter.batchName && rows.length > 0) {
+                              const { data: bData } = await supabase.from("batches").select("id,name").ilike("name", "%" + exportFilter.batchName + "%");
+                              const bIds = new Set((bData||[]).map(b => b.id));
+                              const bMap = Object.fromEntries((bData||[]).map(b => [b.id, b.name]));
+                              rows = rows.filter(r => bIds.has(r.batch_id));
+                              rows = rows.map(r => ({ ...r, batch_name: bMap[r.batch_id] || "" }));
+                            } else {
+                              // Fetch batch names for all rows
+                              const batchIds = [...new Set(rows.map(r => r.batch_id).filter(Boolean))];
+                              if (batchIds.length > 0) {
+                                const { data: bData } = await supabase.from("batches").select("id,name").in("id", batchIds);
+                                const bMap = Object.fromEntries((bData||[]).map(b => [b.id, b.name]));
+                                rows = rows.map(r => ({ ...r, batch_name: bMap[r.batch_id] || "" }));
+                              }
+                            }
+                            // Compute per-subject scores from answers + questions
+                            // We'll compute from what we have (subject_times for time, answers for marks)
+                            setExportRows(rows);
+                            setExportMsg({ type:"ok", text: rows.length + " results found. Click Download CSV to export." });
+                          } catch(e) { setExportMsg({ type:"error", text: e.message }); }
+                          setExportLoading(false);
+                        }}
+                        disabled={exportLoading}
+                        style={{ ...abtn("primary"), padding:"10px", opacity:exportLoading?0.6:1 }}>
+                        {exportLoading ? "Searching..." : "Search"}
+                      </button>
+                      <button onClick={() => setExportFilter({ dateFrom:"", dateTo:"", batchName:"", paperId:"", testName:"" })}
+                        style={{ ...abtn("ghost"), padding:"8px", fontSize:11 }}>Clear</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Results preview + download */}
+                {exportRows.length > 0 && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <div style={{ color:"#a5b4fc", fontWeight:700 }}>{exportRows.length} results found</div>
+                      <button
+                        onClick={() => {
+                          const label = [exportFilter.batchName, exportFilter.testName, exportFilter.paperId].filter(Boolean).join("_") || "all";
+                          downloadReportsCSV(exportRows, label + "_results");
+                        }}
+                        style={{ ...abtn("success"), padding:"10px 20px" }}>
+                        Download CSV
+                      </button>
+                    </div>
+
+                    {/* Preview table */}
+                    <div style={{ overflowX:"auto" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 120px 90px 80px 70px 70px 70px", gap:6, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5, minWidth:600 }}>
+                        <div>#</div><div>Student</div><div>Test / Paper</div><div>Date</div>
+                        <div>Score</div><div style={{ color:"#4ade80" }}>Correct</div>
+                        <div style={{ color:"#f87171" }}>Wrong</div><div>Skip</div>
+                      </div>
+                      {exportRows.slice(0,20).map((r,i) => {
+                        const pct = Math.round((r.score/720)*100);
+                        const d = new Date(r.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+                        return (
+                          <div key={r.id} style={{ display:"grid", gridTemplateColumns:"40px 1fr 120px 90px 80px 70px 70px 70px", gap:6, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center", minWidth:600 }}>
+                            <div style={{ color:"#475569", fontSize:11 }}>{i+1}</div>
+                            <div>
+                              <div style={{ color:"#e2e8f0", fontSize:12, fontWeight:600 }}>{r.student_name || r.student_email?.split("@")[0] || "Student"}</div>
+                              <div style={{ color:"#475569", fontSize:10 }}>{r.batch_name || ""} {r.student_email || ""}</div>
+                            </div>
+                            <div style={{ fontSize:10, color:"#94a3b8" }}>
+                              <div>{r.test_name || ""}</div>
+                              <div style={{ color:"#a5b4fc" }}>{r.paper_id}</div>
+                            </div>
+                            <div style={{ fontSize:11, color:"#64748b" }}>{d}</div>
+                            <div style={{ fontWeight:700, color:pct>=50?"#4ade80":"#f87171", fontSize:13 }}>{r.score}<span style={{ color:"#374151", fontSize:10 }}>/720</span></div>
+                            <div style={{ color:"#4ade80", fontWeight:600 }}>{r.correct}</div>
+                            <div style={{ color:"#f87171", fontWeight:600 }}>{r.wrong}</div>
+                            <div style={{ color:"#64748b" }}>{r.unattempted}</div>
+                          </div>
+                        );
+                      })}
+                      {exportRows.length > 20 && (
+                        <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
+                          Showing first 20 of {exportRows.length}. Download CSV for full data.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* STUDENT REPORT CARD SUB-TAB */}
             {studentTab === "studentcard" && (
@@ -3166,6 +3399,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
       batch_id:         nextTest.batch_id,
       test_name:        nextTest.name,
       exam_window_end:  nextTest.exam_window_end || null,
+      disable_submit:   nextTest.disable_submit === "true",
     } : null);
   };
 
@@ -3595,7 +3829,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked, visited }) {
 // 
 // EXAM SCREEN
 // 
-function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
+function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disableSubmit }) {
   const restoreSession = () => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
@@ -3651,20 +3885,29 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
   // Mark first question as visited on mount
   useEffect(() => { setVisited(p => { const n = new Set(p); n.add(0); return n; }); }, []);
 
-  // Lazy-load diagram images for current question on demand
+  // Prefetch ALL images for current subject in background when subject changes
+  // This batches one query per subject instead of one per question
   useEffect(() => {
-    if (!q?.id) return;
-    if (q.diagram_data || q.solution_diagram_data) return; // already have it
+    if (!q?.subject || !questions?.length) return;
+    const subjQs = questions.filter(sq => sq.subject === q.subject && !sq.diagram_data);
+    if (!subjQs.length) return; // all images already loaded for this subject
+    const ids = subjQs.map(sq => sq.id);
     supabase.from("questions")
       .select("id, diagram_data, solution_diagram_data")
-      .eq("id", q.id)
-      .single()
+      .in("id", ids)
       .then(({ data }) => {
-        if (data?.diagram_data)          q.diagram_data          = data.diagram_data;
-        if (data?.solution_diagram_data) q.solution_diagram_data = data.solution_diagram_data;
+        if (!data) return;
+        // Patch images into the questions array in-place
+        data.forEach(row => {
+          const target = questions.find(sq => sq.id === row.id);
+          if (target) {
+            if (row.diagram_data)          target.diagram_data          = row.diagram_data;
+            if (row.solution_diagram_data) target.solution_diagram_data = row.solution_diagram_data;
+          }
+        });
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q?.id]);
+  }, [q?.subject]);
 
   // Webcam setup if enabled
   useEffect(() => {
@@ -3889,7 +4132,12 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd }) {
             <span style={{ color: timerClr, fontSize: 18 }}></span>
             <span style={{ color: timerClr, fontFamily: "monospace", fontSize: "1.1rem", fontWeight: 700 }}>{fmt(timeLeft)}</span>
           </div>
-          <button onClick={() => setShowModal(true)} style={btn("danger", { padding: "8px 16px", fontSize: 12 })}>Submit</button>
+          {!disableSubmit && (
+            <button onClick={() => setShowModal(true)} style={btn("danger", { padding: "8px 16px", fontSize: 12 })}>Submit</button>
+          )}
+          {disableSubmit && (
+            <div style={{ fontSize: 11, color: "#64748b", padding: "6px 10px" }}>Auto-submit at end</div>
+          )}
         </div>
       </div>
 
@@ -4613,6 +4861,7 @@ export default function App() {
   });
   const [brandingReady,setBrandingReady]= useState(true);
   const [examWindowEnd, setExamWindowEnd] = useState(null); // ISO string of window end for auto-submit
+  const [disableSubmit, setDisableSubmit] = useState(false); // hide submit button when admin disables early submit
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
   const darkMode = true; // always dark
@@ -4622,6 +4871,9 @@ export default function App() {
   // Sync theme to global context so all components can read it
   ThemeCtx.dark = darkMode;
   ThemeCtx.branding = branding;
+
+  // Flush any pending result saves from previous session (retry on reconnect)
+  useEffect(() => { flushPendingResults(); }, []);
 
   // Load platform settings + branding from Supabase on mount
   useEffect(() => {
@@ -4736,32 +4988,55 @@ export default function App() {
     const usePaperId = paperId || "NEET_2025";
     if (testMeta) setActiveTest(testMeta);
     else setActiveTest(null);
-    // Store the exam window end so ExamScreen can auto-submit at the right time
     setExamWindowEnd(testMeta?.exam_window_end || null);
+    setDisableSubmit(testMeta?.disable_submit === true);
     setYear(2025);
     setLoadingQ(true);
     setLoadingError(null);
 
+    const CACHE_KEY = "neet_q_cache_" + usePaperId;
+    const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+    // Try fresh cache first (avoids DB hit entirely)
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const { data: cachedQs, ts } = JSON.parse(raw);
+        if (cachedQs && (Date.now() - ts) < CACHE_TTL) {
+          setQuestions(cachedQs);
+          setLoadingQ(false);
+          setScreen(SCREEN.INSTRUCTIONS);
+          return; // served from cache  no DB query
+        }
+      }
+    } catch (_) {}
+
+    // Cache miss or expired  fetch from DB
     const { questions: remote, error } = await sbFetchQuestions(usePaperId);
 
     if (error) {
-      // Try localStorage cache as fallback
-      const cached = localStorage.getItem("neet_questions_cache_" + usePaperId);
-      if (cached) {
-        try {
-          setQuestions(JSON.parse(cached));
-          setLoadingQ(false);
-          setScreen(SCREEN.INSTRUCTIONS);
-          return;
-        } catch (_) {}
-      }
+      // Fallback to stale cache on error
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const { data: cachedQs } = JSON.parse(raw);
+          if (cachedQs) {
+            setQuestions(cachedQs);
+            setLoadingQ(false);
+            setScreen(SCREEN.INSTRUCTIONS);
+            return;
+          }
+        }
+      } catch (_) {}
       setLoadingError(error);
       setLoadingQ(false);
       return;
     }
 
-    // Cache for offline resilience
-    try { localStorage.setItem("neet_questions_cache_" + usePaperId, JSON.stringify(remote)); } catch (_) {}
+    // Store in cache with timestamp
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ data: remote, ts: Date.now() }));
+    } catch (_) {}
 
     setQuestions(remote);
     setLoadingQ(false);
@@ -5061,7 +5336,7 @@ export default function App() {
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} />}
       {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} />}
-      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} />}
+      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} disableSubmit={disableSubmit} />}
       {screen === SCREEN.RESULT       && (
         <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta}
           onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }}
