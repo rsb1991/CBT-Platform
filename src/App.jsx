@@ -3240,7 +3240,7 @@ function AuthScreen({ onAuth }) {
 // 
 // DASHBOARD
 // 
-function Dashboard({ user, onStart, onSignOut, settings }) {
+function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingMsg }) {
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [batchConfig, setBatchConfig] = useState(null);
@@ -3494,6 +3494,17 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
       <style>{`@keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }`}</style>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
+
+        {/* Error message banner */}
+        {loadingMsg && (
+          <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f87171", flexShrink: 0 }} />
+              <span style={{ color: "#fca5a5", fontSize: 13 }}>{loadingMsg}</span>
+            </div>
+            <button onClick={() => setLoadingMsg(null)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 18, padding: "0 4px", flexShrink: 0 }}></button>
+          </div>
+        )}
 
         {batchConfig && (
           <div style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 10, padding: "8px 16px", marginBottom: nextTest ? 8 : 16, display: "flex", alignItems: "center", gap: 10 }}>
@@ -4864,6 +4875,7 @@ export default function App() {
   const [disableSubmit, setDisableSubmit] = useState(false); // hide submit button when admin disables early submit
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
+  const [loadingMsg,   setLoadingMsg]   = useState(null); // user-friendly error message
   const darkMode = true; // always dark
   const hindiMode = false;
   const [settings,     setSettings]     = useState({});   // platform_settings from Supabase
@@ -5028,8 +5040,10 @@ export default function App() {
           }
         }
       } catch (_) {}
-      setLoadingError(error);
+      // Show friendly error  don't expose technical details
+      setLoadingMsg("Unable to load exam questions. Please contact your administrator.");
       setLoadingQ(false);
+      setScreen(SCREEN.DASHBOARD);
       return;
     }
 
@@ -5134,113 +5148,7 @@ export default function App() {
   }
 
   // Show a clear error screen if questions failed to load
-  if (loadingError) {
-    // Detect what kind of error to show the right fix
-    const isConfig   = loadingError.includes("not set") || loadingError.includes("placeholder") || loadingError.includes("trailing slash") || loadingError.includes("starts with");
-    const isNoData   = loadingError.includes("No questions found");
-    const isRLS      = loadingError.includes("Permission denied") || loadingError.includes("policy");
-    const isNetwork  = loadingError.includes("Network error") || loadingError.includes("internet");
-    const isTable    = loadingError.includes("does not exist");
-    const isKey      = loadingError.includes("API key") || loadingError.includes("anon key");
-
-    const steps = isConfig ? [
-      "Open src/App.jsx in VS Code",
-      "Go to supabase.com  your project  Settings  API",
-      "Copy Project URL  paste on line 8 (replace the placeholder)",
-      "Copy anon public key  paste on line 9",
-      "Save the file (Ctrl+S)  page will auto-reload",
-    ] : isNoData ? [
-      "Go to supabase.com  your project  SQL Editor",
-      "Paste the INSERT questions SQL from the earlier step",
-      "Make sure paper_id = 'NEET_2025' in every row",
-      "Click Run, then try again",
-    ] : isRLS ? [
-      "Go to supabase.com  your project  SQL Editor",
-      "Run: create policy \"read questions\" on questions for select to authenticated using (true);",
-      "Save and try again",
-    ] : isTable ? [
-      "Go to supabase.com  your project  SQL Editor",
-      "Run the full table creation SQL from the setup step",
-      "Then insert your questions and try again",
-    ] : isKey ? [
-      "Go to supabase.com  your project  Settings  API",
-      "Copy the anon public key (starts with eyJ)",
-      "Paste it on line 9 of src/App.jsx",
-      "Save the file",
-    ] : isNetwork ? [
-      "Check your internet connection",
-      "Verify SUPABASE_URL in App.jsx line 8 has no typos",
-      "Make sure the URL has no trailing slash",
-      "Try refreshing the page",
-    ] : [
-      "Open browser console (F12  Console tab)",
-      "Click Begin Mock Test again",
-      "Read the red error message and share it for help",
-    ];
-
-    return (
-      <div style={{ height: "100vh", ...brandingBg(getBranding()), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: brandingFont(getBranding()), padding: 24 }}>
-        <div style={{ maxWidth: 560, width: "100%", background: "#0f172a", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: 32 }}>
-          
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}></div>
-            <div>
-              <div style={{ color: "#f87171", fontWeight: 700, fontSize: "1.1rem" }}>Could not load questions</div>
-              <div style={{ color: "#64748b", fontSize: 13, marginTop: 2 }}>Supabase returned an error</div>
-            </div>
-          </div>
-
-          
-          <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "12px 16px", marginBottom: 24, color: "#fca5a5", fontSize: 14, lineHeight: 1.7 }}>
-            {loadingError}
-          </div>
-
-          
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
-              {isConfig ? " How to fix  set your credentials:" :
-               isNoData ? " How to fix  add questions to Supabase:" :
-               isRLS    ? " How to fix  add a security policy:" :
-               isTable  ? " How to fix  create the table:" :
-               isKey    ? " How to fix  update your API key:" :
-               isNetwork? " How to fix  connection issue:" :
-                          " How to debug:"}
-            </div>
-            <ol style={{ margin: 0, paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 2 }}>
-              {steps.map((s, i) => <li key={i}>{s}</li>)}
-            </ol>
-          </div>
-
-         
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button
-              onClick={() => { setLoadingError(null); handleStartYear(); }}
-              style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 24px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
-            >
-               Retry
-            </button>
-            <button
-              onClick={() => {
-                setLoadingError(null);
-                setYear(2025);
-                setQuestions(buildLocalQuestions(2025));
-                setScreen(SCREEN.INSTRUCTIONS);
-              }}
-              style={{ background: "rgba(255,255,255,0.07)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "11px 24px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
-            >
-               Use Demo Questions Instead
-            </button>
-            <button
-              onClick={() => setLoadingError(null)}
-              style={{ background: "transparent", color: "#64748b", border: "none", borderRadius: 10, padding: "11px 16px", cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
-            >
-               Back
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Error screen suppressed  failures redirect to dashboard silently
 
   return (
     <>
@@ -5334,7 +5242,7 @@ export default function App() {
       {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} />}
       {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
-      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} />}
+      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} loadingMsg={loadingMsg} setLoadingMsg={setLoadingMsg} />}
       {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} />}
       {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} disableSubmit={disableSubmit} />}
       {screen === SCREEN.RESULT       && (
