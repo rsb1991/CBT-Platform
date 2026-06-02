@@ -3381,6 +3381,10 @@ function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingM
   }, [tab]);
 
   const handleStart = () => {
+    // Guard: check attempt limit first
+    if (limitReached) { setAccessErr("You have used all " + attemptLimit + " allowed attempts for this test."); return; }
+    // Guard: check window
+    if (isWindowBlocked) { setAccessErr("Exam is not available right now."); return; }
     // Check access code using effective (batch-aware) settings
     if (eff?.access_code_enabled === "true" && eff?.access_code) {
       const entered = accessCode.replace(/\s/g, "");
@@ -5009,30 +5013,41 @@ export default function App() {
     const CACHE_KEY = "neet_q_cache_" + usePaperId;
     const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-    // Try fresh cache first (avoids DB hit entirely)
+    // Try cache first  handles both old format (plain array) and new format ({data,ts})
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
-        const { data: cachedQs, ts } = JSON.parse(raw);
-        if (cachedQs && (Date.now() - ts) < CACHE_TTL) {
+        const parsed = JSON.parse(raw);
+        // Support both formats: plain array OR {data:[], ts:number}
+        const cachedQs = Array.isArray(parsed) ? parsed : parsed?.data;
+        const ts = Array.isArray(parsed) ? 0 : (parsed?.ts || 0);
+        if (Array.isArray(cachedQs) && cachedQs.length > 0 && (Date.now() - ts) < CACHE_TTL) {
           setQuestions(cachedQs);
           setLoadingQ(false);
           setScreen(SCREEN.INSTRUCTIONS);
-          return; // served from cache  no DB query
+          return;
+        }
+        // Clear corrupt or expired cache
+        if (!Array.isArray(cachedQs) || cachedQs.length === 0) {
+          localStorage.removeItem(CACHE_KEY);
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      try { localStorage.removeItem(CACHE_KEY); } catch (__) {}
+    }
 
-    // Cache miss or expired  fetch from DB
+    // Fetch from DB
     const { questions: remote, error } = await sbFetchQuestions(usePaperId);
 
     if (error) {
-      // Fallback to stale cache on error
+      console.error("[CBT] Question load error:", error);
+      // Try stale cache as last resort
       try {
         const raw = localStorage.getItem(CACHE_KEY);
         if (raw) {
-          const { data: cachedQs } = JSON.parse(raw);
-          if (cachedQs) {
+          const parsed = JSON.parse(raw);
+          const cachedQs = Array.isArray(parsed) ? parsed : parsed?.data;
+          if (Array.isArray(cachedQs) && cachedQs.length > 0) {
             setQuestions(cachedQs);
             setLoadingQ(false);
             setScreen(SCREEN.INSTRUCTIONS);
@@ -5040,12 +5055,12 @@ export default function App() {
           }
         }
       } catch (_) {}
-      // Show friendly error  don't expose technical details
       setLoadingMsg("Unable to load exam questions. Please contact your administrator.");
       setLoadingQ(false);
       setScreen(SCREEN.DASHBOARD);
       return;
     }
+
 
     // Store in cache with timestamp
     try {
