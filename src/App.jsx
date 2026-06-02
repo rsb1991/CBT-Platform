@@ -529,7 +529,7 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
           </div>
         )}
         <h1 style={{ color: branding.title_color||"#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px", fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
-          {branding.platform_name || "Test Platform for the best"}
+          {branding.platform_name || "Best Test Platform"}
         </h1>
         <p style={{ color: branding.tagline_color||"#64748b", margin: "0 0 48px", fontSize: 15, fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
           {branding.platform_tagline || "Select your role to continue"}
@@ -1445,9 +1445,14 @@ function AdminScreen({ onSignOut }) {
 
   const saveBranding = async () => {
     setBrandingLoading(true);
+    setBrandingMsg(null);
+    // Save all keys in one batch upsert
     const entries = Object.entries(brandingForm).map(([key, value]) => ({ key, value: value || "" }));
-    for (const entry of entries) {
-      await supabase.from("branding").upsert(entry, { onConflict: "key" });
+    const { error } = await supabase.from("branding").upsert(entries, { onConflict: "key" });
+    if (error) {
+      setBrandingLoading(false);
+      setBrandingMsg({ type: "error", text: "Save failed: " + error.message });
+      return;
     }
     // Update localStorage cache + CSS variable so next visit shows updated branding instantly
     try {
