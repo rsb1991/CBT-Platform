@@ -525,11 +525,11 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
         {/* Badge */}
         {branding.show_badge !== "false" && (
           <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: branding.badge_color||"#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 24, fontFamily: branding.font_family||"monospace" }}>
-            {branding.badge_text || "NTA NEET UG 2025"}
+            {branding.badge_text || "NEET UG CBT"}
           </div>
         )}
         <h1 style={{ color: branding.title_color||"#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px", fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
-          {branding.platform_name || "Mock Test Platform"}
+          {branding.platform_name || "Test Platform for the Bst"}
         </h1>
         <p style={{ color: branding.tagline_color||"#64748b", margin: "0 0 48px", fontSize: 15, fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
           {branding.platform_tagline || "Select your role to continue"}
