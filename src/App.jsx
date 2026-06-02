@@ -529,7 +529,7 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
           </div>
         )}
         <h1 style={{ color: branding.title_color||"#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px", fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
-          {branding.platform_name || "Test Platform for the Best"}
+          {branding.platform_name || "Test Platform for the best"}
         </h1>
         <p style={{ color: branding.tagline_color||"#64748b", margin: "0 0 48px", fontSize: 15, fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
           {branding.platform_tagline || "Select your role to continue"}
@@ -1461,6 +1461,8 @@ function AdminScreen({ onSignOut }) {
     } catch (_) {}
     setBrandingLoading(false);
     setBrandingMsg({ type: "ok", text: "Branding saved! Changes are live on the landing page." });
+    // Trigger storage event for same-tab update (storage event only fires cross-tab normally)
+    window.dispatchEvent(new StorageEvent("storage", { key: "neet_branding_cache", newValue: JSON.stringify(brandingForm) }));
   };
 
   //  Styles 
@@ -4892,6 +4894,17 @@ export default function App() {
   useEffect(() => { flushPendingResults(); }, []);
 
   // Load platform settings + branding from Supabase on mount
+  // Reload branding from localStorage whenever it changes (e.g. admin saves)
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === "neet_branding_cache" && e.newValue) {
+        try { setBranding(JSON.parse(e.newValue)); } catch (_) {}
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -4906,11 +4919,6 @@ export default function App() {
           setBranding(b);
           try {
             localStorage.setItem("neet_branding_cache", JSON.stringify(b));
-            var bg = b.bg_type === "solid" && b.bg_solid_color ? b.bg_solid_color
-              : b.bg_type === "image" && b.bg_image_data ? "url(" + b.bg_image_data + ") center/cover no-repeat"
-              : b.bg_gradient_from && b.bg_gradient_to ? "linear-gradient(135deg," + b.bg_gradient_from + " 0%," + b.bg_gradient_to + " 50%," + b.bg_gradient_from + " 100%)"
-              : "";
-            if (bg) document.documentElement.style.setProperty("--landing-bg", bg);
           } catch (_) {}
         }
         setBrandingReady(true);
