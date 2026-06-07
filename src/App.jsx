@@ -466,7 +466,7 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
         {/* Badge */}
         {branding.show_badge !== "false" && (
           <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: "#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 24, fontFamily: "monospace" }}>
-            {branding.badge_text || "NTA NEET UG 2025"}
+            {branding.badge_text || "NEET CBT"}
           </div>
         )}
         <h1 style={{ color: "#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px" }}>
@@ -694,7 +694,7 @@ function AdminScreen({ onSignOut }) {
         platform_tagline:"Select your role to continue", bg_type:"gradient",
         bg_gradient_from:"#0f0c29", bg_gradient_to:"#302b63",
         bg_solid_color:"#0f172a", bg_image_data:"", accent_color:"#7c3aed",
-        show_badge:"true", badge_text:"NTA NEET UG 2025"
+        show_badge:"true", badge_text:"NEET CBT"
       };
       setBrandingForm(defaults); // show defaults immediately so UI is never blank
       try {
@@ -2728,7 +2728,7 @@ function AdminScreen({ onSignOut }) {
                    : brandingForm.bg_type === "image" && brandingForm.bg_image_data ? { backgroundImage:"url("+brandingForm.bg_image_data+")", backgroundSize:"cover", backgroundPosition:"center" }
                    : { background:"linear-gradient(135deg,"+(brandingForm.bg_gradient_from||"#0f0c29")+" 0%,"+(brandingForm.bg_gradient_to||"#302b63")+" 100%)" }) }}>
                 {(brandingForm.logo_data || brandingForm.logo_url) && <img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:48, maxWidth:140, objectFit:"contain", borderRadius:4 }} />}
-                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:"#c084fc", letterSpacing:1 }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
+                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:"#c084fc", letterSpacing:1 }}>{brandingForm.badge_text || "NEET CBT"}</div>}
                 <div style={{ color:"#fff", fontWeight:700, fontSize:"1.1rem" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
                 <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
               </div>
@@ -2757,7 +2757,7 @@ function AdminScreen({ onSignOut }) {
                   <div style={{ color:"#e2e8f0", fontSize:13 }}>Show Badge</div>
                   <button onClick={()=>setBrandingForm(p=>({...p,show_badge:p.show_badge==="false"?"true":"false"}))} style={{ ...abtn(brandingForm.show_badge!=="false"?"success":"ghost"), minWidth:60 }}>{brandingForm.show_badge!=="false"?"ON":"OFF"}</button>
                 </div>
-                {brandingForm.show_badge !== "false" && <div><label style={alabel}>Badge Text</label><input value={brandingForm.badge_text||""} onChange={e=>setBrandingForm(p=>({...p,badge_text:e.target.value}))} placeholder="NTA NEET UG 2025" style={ainput} /></div>}
+                {brandingForm.show_badge !== "false" && <div><label style={alabel}>Badge Text</label><input value={brandingForm.badge_text||""} onChange={e=>setBrandingForm(p=>({...p,badge_text:e.target.value}))} placeholder="NEET CBT" style={ainput} /></div>}
               </div>
             </div>
              {/* Background */}
@@ -2849,7 +2849,7 @@ function AuthScreen({ onAuth }) {
         
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: "#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16, fontFamily: "monospace" }}>
-            NTA  NEET UG 2025
+            NEET CBT
           </div>
           <h1 style={{ color: "#fff", fontSize: "2rem", fontWeight: 700, margin: "0 0 6px", textShadow: "0 0 40px rgba(168,85,247,0.4)" }}>
             Mock Test Platform
@@ -3258,7 +3258,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
        
         {tab === "start" && (
           <div style={{ ...card(), padding: 28 }}>
-            <h2 style={{ color: "#e2e8f0", margin: "0 0 6px", fontSize: "1.2rem", fontWeight: 700 }}>{nextTest ? nextTest.name : "NEET UG 2025 - Mock Test"}</h2>
+            <h2 style={{ color: "#e2e8f0", margin: "0 0 6px", fontSize: "1.2rem", fontWeight: 700 }}>{nextTest ? nextTest.name : "NEET CBT - Mock Test"}</h2>
             <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: 14 }}>{nextTest ? (nextTest.description || "Full-length mock examination") : "Full-length mock examination"}</p>
 
             
