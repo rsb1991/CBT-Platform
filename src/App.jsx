@@ -1341,30 +1341,74 @@ function AdminScreen({ onSignOut }) {
 
   const saveBranding = async () => {
     setBrandingLoading(true);
-    const entries = Object.entries(brandingForm).map(([key, value]) => ({ key, value: value || "" }));
-    for (const entry of entries) {
-      await supabase.from("branding").upsert(entry, { onConflict: "key" });
+    setBrandingMsg({ type: "info", text: "Saving..." });
+
+    const errors = [];
+
+    // Save each key one by one using DELETE + INSERT to avoid any upsert/conflict issues
+    // This is the most reliable approach regardless of table constraints
+    for (const [key, value] of Object.entries(brandingForm)) {
+      // Skip saving logo_data if it is extremely large (>800KB base64 string)
+      // Large logos should use logo_url instead
+      if (key === "logo_data" && value && value.length > 800000) {
+        setBrandingMsg({ type: "error", text: "Logo image is too large (" + Math.round(value.length/1024) + "KB). Please use a smaller image (under 600KB) or use a URL instead." });
+        setBrandingLoading(false);
+        return;
+      }
+
+      // Try UPDATE first
+      const { data: existing } = await supabase
+        .from("branding")
+        .select("key")
+        .eq("key", key)
+        .maybeSingle();
+
+      if (existing) {
+        // Row exists  UPDATE it
+        const { error } = await supabase
+          .from("branding")
+          .update({ value: value || "" })
+          .eq("key", key);
+        if (error) errors.push(key + ": " + error.message);
+      } else {
+        // Row does not exist  INSERT it
+        const { error } = await supabase
+          .from("branding")
+          .insert({ key, value: value || "" });
+        if (error) errors.push(key + ": " + error.message);
+      }
     }
-    // Update localStorage cache + CSS variable so next visit shows updated branding instantly
-    try {
-      localStorage.setItem("neet_branding_cache", JSON.stringify(brandingForm));
-      // Apply new background to body immediately for current session
-      var bg = "";
-      if (brandingForm.bg_type === "solid" && brandingForm.bg_solid_color) bg = brandingForm.bg_solid_color;
-      else if (brandingForm.bg_type === "image" && brandingForm.bg_image_data) bg = "url(" + brandingForm.bg_image_data + ") center/cover no-repeat";
-      else if (brandingForm.bg_gradient_from && brandingForm.bg_gradient_to) bg = "linear-gradient(135deg," + brandingForm.bg_gradient_from + " 0%," + brandingForm.bg_gradient_to + " 50%," + brandingForm.bg_gradient_from + " 100%)";
-      if (bg) document.documentElement.style.setProperty("--landing-bg", bg);
-    } catch (_) {}
+
     setBrandingLoading(false);
-    setBrandingMsg({ type: "ok", text: "Branding saved! Changes are live on the landing page." });
+
+    if (errors.length) {
+      setBrandingMsg({ type: "error", text: "Save failed:
+" + errors.slice(0, 5).join("
+") });
+      return;
+    }
+
+    // Update localStorage cache so next visit gets fresh branding instantly
+    try { localStorage.setItem("neet_branding_cache", JSON.stringify(brandingForm)); } catch (_) {}
+
+    // Notify root App (same tab) to update branding state without page reload
+    try {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: "neet_branding_cache",
+        newValue: JSON.stringify(brandingForm),
+        storageArea: localStorage,
+      }));
+    } catch (_) {}
+
+    setBrandingMsg({ type: "success", text: "Branding saved! Changes are live on the landing page." });
   };
 
   //  Styles 
   const mstyle = (m) => !m ? {} : {
     borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 14, whiteSpace: "pre-line",
-    background: m.type === "error" ? "rgba(239,68,68,0.1)" : m.type === "success" ? "rgba(34,197,94,0.1)" : "rgba(99,102,241,0.1)",
-    border: "1px solid " + (m.type === "error" ? "rgba(239,68,68,0.3)" : m.type === "success" ? "rgba(34,197,94,0.3)" : "rgba(99,102,241,0.3)"),
-    color: m.type === "error" ? "#f87171" : m.type === "success" ? "#4ade80" : "#a5b4fc",
+    background: m.type === "error" ? "rgba(239,68,68,0.1)" : (m.type === "success" || m.type === "ok") ? "rgba(34,197,94,0.1)" : "rgba(99,102,241,0.1)",
+    border: "1px solid " + (m.type === "error" ? "rgba(239,68,68,0.3)" : (m.type === "success" || m.type === "ok") ? "rgba(34,197,94,0.3)" : "rgba(99,102,241,0.3)"),
+    color: m.type === "error" ? "#f87171" : (m.type === "success" || m.type === "ok") ? "#4ade80" : "#a5b4fc",
   };
 
   const settingInput = { ...ainput, fontSize: 13, padding: "8px 12px" };
@@ -4523,6 +4567,17 @@ export default function App() {
 
   // Sync theme to global context so all components can read it
   ThemeCtx.dark = darkMode;
+
+  // Listen for branding updates from AdminScreen (same tab, dispatched via StorageEvent)
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === "neet_branding_cache" && e.newValue) {
+        try { setBranding(JSON.parse(e.newValue)); } catch (_) {}
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // Load platform settings + branding from Supabase on mount
   useEffect(() => {
