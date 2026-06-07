@@ -1040,22 +1040,16 @@ function AdminScreen({ onSignOut }) {
     setAnalyticsData(null);
     const pid = paperFilter || "PAPER_01";
 
-    // Fetch results for this paper, fall back to all if none found
-    const { data: allResults } = await supabase
+    // Fetch results ONLY for the exact paper ID entered — no fallback
+    const { data: results } = await supabase
       .from("test_results")
       .select("id, answers, score, correct, wrong, unattempted, total, subject_times, paper_id, student_name, student_email, test_name, created_at, percentile")
       .eq("paper_id", pid)
       .order("score", { ascending: false })
       .limit(500);
-    const { data: allResultsAny } = await supabase
-      .from("test_results")
-      .select("id, answers, score, correct, wrong, unattempted, total, subject_times, paper_id, student_name, student_email, test_name, created_at, percentile")
-      .order("score", { ascending: false })
-      .limit(500);
-    const results = (allResults && allResults.length > 0) ? allResults : (allResultsAny || []);
 
-    if (!results.length) {
-      setAnalyticsData({ byQ: [], byStudent: [], total: 0, noResults: true });
+    if (!results || !results.length) {
+      setAnalyticsData({ byQ: [], byStudent: [], total: 0, noResults: true, pid });
       setAnalyticsLoading(false);
       return;
     }
@@ -2781,7 +2775,10 @@ function AdminScreen({ onSignOut }) {
             ) : !analyticsData ? (
               <div style={{ textAlign:"center", color:"#475569", padding:40 }}>Click Load to fetch analytics for a paper.</div>
             ) : analyticsData.noResults ? (
-              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>No test attempts found. Students need to submit a test first.</div>
+              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>
+                <div style={{ fontSize:14, marginBottom:8 }}>No test attempts found for paper <span style={{ color:"#fbbf24", fontWeight:700 }}>{analyticsData.pid || paperFilter}</span>.</div>
+                <div style={{ fontSize:12, color:"#374151" }}>Make sure students submitted the exam with this exact paper ID. Check the Paper ID in your batch test settings.</div>
+              </div>
             ) : (
               <>
                 {/* Class summary cards */}
