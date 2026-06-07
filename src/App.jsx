@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import QuestionRenderer from "./QuestionRenderer";
 
@@ -24,23 +24,8 @@ const ADMIN_PASS  = import.meta.env.VITE_ADMIN_PASS  || "Neet@Admin#2025";
 const AVAILABLE_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
 
 // Theme context - shared across all components
-const ThemeCtx = { dark: true, branding: {} }; // mutable object shared across all screens
+const ThemeCtx = { dark: true }; // mutable object, avoids full React context overhead
 const getTheme = () => ThemeCtx.dark;
-const getBranding = () => ThemeCtx.branding;
-
-// Helper: compute background style from branding
-const brandingBg = (b = {}) => {
-  if (b.bg_type === "solid" && b.bg_solid_color)
-    return { background: b.bg_solid_color };
-  if (b.bg_type === "image" && b.bg_image_data)
-    return { backgroundImage: "url(" + b.bg_image_data + ")", backgroundSize: "cover", backgroundPosition: "center" };
-  if (b.bg_gradient_from && b.bg_gradient_to)
-    return { background: "linear-gradient(135deg," + b.bg_gradient_from + " 0%," + b.bg_gradient_to + " 50%," + b.bg_gradient_from + " 100%)" };
-  return { background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)" };
-};
-const brandingFont = (b = {}) => b.font_family || "'Crimson Pro', Georgia, serif";
-const brandingTitle = (b = {}) => b.title_color || "#ffffff";
-const brandingTagline = (b = {}) => b.tagline_color || "#94a3b8";
 
 // 
 // FULL 180-QUESTION BANK (45 per subject)
@@ -359,7 +344,7 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
   try {
     const { data, error } = await supabase
       .from("questions")
-      .select("id, number, subject, type, question_text, equation, diagram_url, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, paper_id")
+      .select("id, number, subject, type, question_text, equation, diagram_url, option_a, option_b, option_c, option_d, option_a_image, option_b_image, option_c_image, option_d_image, correct, solution_text, solution_eq, paper_id")
       .eq("paper_id", paperId)
       .order("number", { ascending: true });
 
@@ -383,6 +368,7 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
       diagram_url:   q.diagram_url || "",
       diagram_data:  "",  // loaded on-demand per question
       options:       [q.option_a, q.option_b, q.option_c, q.option_d],
+      option_images: [q.option_a_image||"", q.option_b_image||"", q.option_c_image||"", q.option_d_image||""],
       correct:       q.correct,
       solution_text:         q.solution_text || q.solution || "",
       solution_eq:           q.solution_eq || "",
@@ -397,61 +383,16 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
 }
 
 // Returns { error } or null
-// Debounced result save  writes to localStorage immediately (instant feedback)
-// then persists to Supabase with retry logic
-let _pendingSave = null;
 async function sbSaveResult(userId, payload) {
-  // 1. Save to localStorage immediately so result is never lost
+  if (!isSupabaseConfigured()) return null;
   try {
-    const pendingKey = "neet_pending_result_" + userId;
-    localStorage.setItem(pendingKey, JSON.stringify({ userId, payload, ts: Date.now() }));
-  } catch (_) {}
-
-  // 2. Clear any pending debounce timer
-  if (_pendingSave) clearTimeout(_pendingSave);
-
-  // 3. Flush to Supabase after 1.5s (debounce  prevents duplicate writes on fast resubmit)
-  _pendingSave = setTimeout(async () => {
-    if (!isSupabaseConfigured()) return;
-    try {
-      const { error } = await supabase
-        .from("test_results")
-        .insert([{ user_id: userId, ...payload, created_at: new Date().toISOString() }]);
-      if (!error) {
-        // Clear pending save from localStorage on success
-        try { localStorage.removeItem("neet_pending_result_" + userId); } catch (_) {}
-      } else {
-        console.warn("Could not save result:", friendlyError(error, "test_results"));
-        // Schedule retry after 10s
-        setTimeout(() => sbSaveResult(userId, payload), 10000);
-      }
-    } catch (e) {
-      console.warn("Could not save result:", e.message);
-      // Retry after 10s on network error
-      setTimeout(() => sbSaveResult(userId, payload), 10000);
-    }
-  }, 1500);
-}
-
-// On app load, flush any pending results from previous session
-async function flushPendingResults() {
-  if (!isSupabaseConfigured()) return;
-  try {
-    const keys = Object.keys(localStorage).filter(k => k.startsWith("neet_pending_result_"));
-    for (const key of keys) {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      const { userId, payload, ts } = JSON.parse(raw);
-      // Only retry if less than 24 hours old
-      if (Date.now() - ts < 24 * 60 * 60 * 1000) {
-        const { error } = await supabase.from("test_results")
-          .insert([{ user_id: userId, ...payload, created_at: new Date(ts).toISOString() }]);
-        if (!error) localStorage.removeItem(key);
-      } else {
-        localStorage.removeItem(key); // too old, discard
-      }
-    }
-  } catch (_) {}
+    const { error } = await supabase
+      .from("test_results")
+      .insert([{ user_id: userId, ...payload, created_at: new Date().toISOString() }]);
+    if (error) console.warn("Could not save result:", friendlyError(error, "test_results"));
+  } catch (e) {
+    console.warn("Could not save result:", e.message);
+  }
 }
 
 // Returns array of history rows (never throws)
@@ -524,14 +465,14 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
         )}
         {/* Badge */}
         {branding.show_badge !== "false" && (
-          <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: branding.badge_color||"#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 24, fontFamily: branding.font_family||"monospace" }}>
-            {branding.badge_text || "NEET UG CBT"}
+          <div style={{ display: "inline-block", background: "rgba(168,85,247,0.2)", border: "1px solid rgba(168,85,247,0.5)", borderRadius: 99, padding: "6px 20px", fontSize: 12, color: "#c084fc", letterSpacing: 2, textTransform: "uppercase", marginBottom: 24, fontFamily: "monospace" }}>
+            {branding.badge_text || "NTA NEET UG 2025"}
           </div>
         )}
-        <h1 style={{ color: branding.title_color||"#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px", fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
-          {branding.platform_name || "Best Test Platform"}
+        <h1 style={{ color: "#fff", fontSize: "2.2rem", fontWeight: 700, margin: "0 0 10px" }}>
+          {branding.platform_name || "Mock Test Platform"}
         </h1>
-        <p style={{ color: branding.tagline_color||"#64748b", margin: "0 0 48px", fontSize: 15, fontFamily: branding.font_family||"'Crimson Pro', Georgia, serif" }}>
+        <p style={{ color: "#64748b", margin: "0 0 48px", fontSize: 15 }}>
           {branding.platform_tagline || "Select your role to continue"}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="mob-grid1">
@@ -539,14 +480,14 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
             onMouseEnter={e => e.currentTarget.style.background = "rgba(99,102,241,0.25)"}
             onMouseLeave={e => e.currentTarget.style.background = "rgba(99,102,241,0.12)"}>
             <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>&#127891;</div>
-            <div style={{ color: branding.card_text_color||"#a5b4fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8, fontFamily: branding.font_family||"inherit" }}>Student</div>
+            <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8 }}>Student</div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Login to take the mock exam</div>
           </button>
           <button onClick={onAdmin} style={{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: 16, padding: "32px 20px", cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}
             onMouseEnter={e => e.currentTarget.style.background = "rgba(168,85,247,0.22)"}
             onMouseLeave={e => e.currentTarget.style.background = "rgba(168,85,247,0.1)"}>
             <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>&#128736;</div>
-            <div style={{ color: branding.card_text_color||"#c084fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8, fontFamily: branding.font_family||"inherit" }}>Admin</div>
+            <div style={{ color: "#c084fc", fontWeight: 700, fontSize: "1.1rem", marginBottom: 8 }}>Admin</div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Manage questions and results</div>
           </button>
         </div>
@@ -576,7 +517,7 @@ function AdminAuthScreen({ onSuccess, onBack }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: brandingFont(getBranding()), padding: "1.5rem" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem" }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14, marginBottom: 24, fontFamily: "inherit" }}>
           &larr; Back
@@ -644,7 +585,7 @@ const abtn = (v) => {
 const ainput = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", color: "#e2e8f0", fontSize: "0.92rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
 const alabel = { color: "#94a3b8", fontSize: 11, display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 };
 const acard  = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 };
-const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "", paper_id: "NEET_2025", chapter: "", difficulty: "medium" });
+const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", option_a_image: "", option_b_image: "", option_c_image: "", option_d_image: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "", paper_id: "NEET_2025", chapter: "", difficulty: "medium" });
 const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Botany: "#22c55e", Zoology: "#f43f5e" };
 
 // Helper mini-components for admin
@@ -726,7 +667,7 @@ function AdminScreen({ onSignOut }) {
   const [batchView,       setBatchView]        = useState("list"); // list | edit | tests
   const [batchTests,      setBatchTests]       = useState([]);
   const [selectedTest,    setSelectedTest]     = useState(null);
-  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false", disable_submit:"false" });
+  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" });
   const [batchTestView,   setBatchTestView]    = useState("list"); // list | create | edit | report
   const [testMsg,         setTestMsg]          = useState(null);
   const [testLoading,     setTestLoading]      = useState(false);
@@ -753,9 +694,7 @@ function AdminScreen({ onSignOut }) {
         platform_tagline:"Select your role to continue", bg_type:"gradient",
         bg_gradient_from:"#0f0c29", bg_gradient_to:"#302b63",
         bg_solid_color:"#0f172a", bg_image_data:"", accent_color:"#7c3aed",
-        show_badge:"true", badge_text:"NTA NEET UG 2025",
-        font_family:"Georgia, serif", title_color:"#ffffff",
-        tagline_color:"#94a3b8", badge_color:"#c084fc", card_text_color:"#a5b4fc"
+        show_badge:"true", badge_text:"NTA NEET UG 2025"
       };
       setBrandingForm(defaults); // show defaults immediately so UI is never blank
       try {
@@ -776,7 +715,7 @@ function AdminScreen({ onSignOut }) {
     setLoading(true);
     const usePaper = pid || paperFilter || "NEET_2025";
     const { data, error } = await supabase.from("questions")
-      .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,solution_diagram_data,paper_id")
+      .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,solution_diagram_data,paper_id")
       .eq("paper_id", usePaper).order("subject").order("number");
     if (!error) setQuestions(data || []);
     else setMsg({ type: "error", text: error.message });
@@ -819,10 +758,6 @@ function AdminScreen({ onSignOut }) {
 
   //  Load students 
   const [reportFilter,    setReportFilter]    = useState({ search:"", minScore:"", maxScore:"", dateFrom:"", dateTo:"", sortBy:"date", paperId:"", nameSearch:"" });
-  const [exportFilter,    setExportFilter]    = useState({ dateFrom:"", dateTo:"", batchName:"", paperId:"", testName:"" });
-  const [exportRows,      setExportRows]      = useState([]);
-  const [exportLoading,   setExportLoading]   = useState(false);
-  const [exportMsg,       setExportMsg]       = useState(null);
   const [studentReportEmail, setStudentReportEmail] = useState("");
   const [studentReportData,  setStudentReportData]  = useState([]);
   const [studentReportLoading, setStudentReportLoading] = useState(false);
@@ -839,52 +774,24 @@ function AdminScreen({ onSignOut }) {
   };
 
   // Download all reports as CSV
-  const downloadReportsCSV = (rows, filename) => {
-    const esc = v => '"' + String(v || "").replace(/"/g, '""') + '"';
-    const header = [
-      "S.No","Name","Email","Batch","Test Name","Paper ID","Date","Time",
-      "Total Score","Max Marks","Percentage","Correct","Wrong","Unattempted","Percentile",
-      "Physics Score","Physics Correct","Physics Wrong","Physics Time(s)",
-      "Chemistry Score","Chemistry Correct","Chemistry Wrong","Chemistry Time(s)",
-      "Botany Score","Botany Correct","Botany Wrong","Botany Time(s)",
-      "Zoology Score","Zoology Correct","Zoology Wrong","Zoology Time(s)"
-    ].map(esc).join(",");
+  const downloadReportsCSV = (rows) => {
+    const header = "S.No,Name,Email,Paper ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
     const lines = rows.map((r, i) => {
-      const d   = new Date(r.created_at).toLocaleDateString("en-IN");
-      const t   = new Date(r.created_at).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
-      const pct = Math.round((r.score / 720) * 100);
-      const st  = r.subject_times || {};
-      const sa  = r.subject_answers || {};
-      // Compute per-subject scores from subject_times (time proxy) + answers if available
-      const SUBJS = ["Physics","Chemistry","Botany","Zoology"];
-      // Compute subject scores from answers if question data available
-      // Otherwise use subject_times as proxy
-      const subCols = SUBJS.flatMap(s => {
-        const timeS = Math.round((st[s]||0));
-        // subject_answers not directly stored - use placeholder
-        return ["", "", "", timeS];
-      });
+      const d    = new Date(r.created_at).toLocaleDateString("en-IN");
+      const pct  = Math.round((r.score / 720) * 100);
+      const st   = r.subject_times || {};
       return [
-        i+1,
-        r.student_name || r.student_email?.split("@")[0] || r.user_id?.slice(0,10),
-        r.student_email || "",
-        r.batch_name || "",
-        r.test_name || "",
-        r.paper_id || "",
-        d, t,
-        r.score, 720, pct+"%",
+        i+1, r.user_id.slice(0,12), d, r.score, pct+"%",
         r.correct, r.wrong, r.unattempted,
-        r.percentile != null ? r.percentile+"%" : "",
-        ...subCols
-      ].map(esc).join(",");
+        r.percentile != null ? r.percentile+"%" : "N/A",
+        st.Physics || 0, st.Chemistry || 0, st.Botany || 0, st.Zoology || 0
+      ].join(",");
     });
     const csv  = header + "\n" + lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    a.href = url;
-    a.download = (filename || "exam_results") + "_" + new Date().toISOString().slice(0,10) + ".csv";
-    a.click();
+    a.href = url; a.download = "exam_reports_" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -912,7 +819,11 @@ function AdminScreen({ onSignOut }) {
       question_text: form.question_text, equation: form.equation,
       diagram_data: form.diagram_data, diagram_url: "",
       option_a: form.option_a, option_b: form.option_b, option_c: form.option_c, option_d: form.option_d,
-      correct: +form.correct, solution_text: form.solution_text, solution_eq: form.solution_eq, solution_diagram_data: form.solution_diagram_data || "", paper_id: form.paper_id || "NEET_2025", chapter: form.chapter || "", difficulty: form.difficulty || "medium",
+      correct: +form.correct, solution_text: form.solution_text, solution_eq: form.solution_eq,
+      solution_diagram_data: form.solution_diagram_data || "",
+      option_a_image: form.option_a_image || "", option_b_image: form.option_b_image || "",
+      option_c_image: form.option_c_image || "", option_d_image: form.option_d_image || "",
+      paper_id: form.paper_id || "NEET_2025", chapter: form.chapter || "", difficulty: form.difficulty || "medium",
     };
     const { error } = editId
       ? await supabase.from("questions").update(payload).eq("id", editId)
@@ -928,7 +839,7 @@ function AdminScreen({ onSignOut }) {
 
   //  Edit question 
   const handleEdit = (q) => {
-    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "", paper_id: q.paper_id || "NEET_2025", chapter: q.chapter || "", difficulty: q.difficulty || "medium" });
+    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", option_a_image: q.option_a_image || "", option_b_image: q.option_b_image || "", option_c_image: q.option_c_image || "", option_d_image: q.option_d_image || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "", paper_id: q.paper_id || "NEET_2025", chapter: q.chapter || "", difficulty: q.difficulty || "medium" });
     setImgInfo(q.diagram_data ? { kb: Math.round(q.diagram_data.length * 0.75 / 1024) } : null);
     setEditId(q.id); setTab("add");
   };
@@ -1156,20 +1067,7 @@ function AdminScreen({ onSignOut }) {
       .select("*")
       .eq("batch_id", batchId)
       .order("created_at", { ascending: false });
-    if (data) {
-      // Fetch question counts per paper_id
-      const paperIds = [...new Set(data.map(t => t.paper_id).filter(Boolean))];
-      const counts = {};
-      await Promise.all(paperIds.map(async pid => {
-        const { count } = await supabase.from("questions")
-          .select("id", { count: "exact", head: true })
-          .eq("paper_id", pid);
-        counts[pid] = count || 0;
-      }));
-      setBatchTests(data.map(t => ({ ...t, _qCount: counts[t.paper_id] ?? null })));
-    } else {
-      setBatchTests([]);
-    }
+    setBatchTests(data || []);
     setTestLoading(false);
   };
 
@@ -1184,8 +1082,7 @@ function AdminScreen({ onSignOut }) {
       attempt_limit: +testForm.attempt_limit || 1,
       access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
       resume_code: testForm.resume_code, status: testForm.status || "scheduled",
-      manual_release:  testForm.manual_release  || "false",
-      disable_submit:  testForm.disable_submit  || "false"
+      manual_release: testForm.manual_release || "false"
     }]);
     if (error) { setTestMsg({ type:"error", text: error.message }); return; }
     setTestMsg({ type:"ok", text:"Test created!" });
@@ -1202,8 +1099,7 @@ function AdminScreen({ onSignOut }) {
       exam_window_end: testForm.exam_window_end, attempt_limit: +testForm.attempt_limit || 1,
       access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
       resume_code: testForm.resume_code, status: testForm.status,
-      manual_release:  testForm.manual_release  || "false",
-      disable_submit:  testForm.disable_submit  || "false"
+      manual_release: testForm.manual_release || "false"
     }).eq("id", selectedTest.id);
     if (error) setTestMsg({ type:"error", text: error.message });
     else { setTestMsg({ type:"ok", text:"Test updated!" }); loadBatchTests(selectedBatch.id); }
@@ -1445,14 +1341,9 @@ function AdminScreen({ onSignOut }) {
 
   const saveBranding = async () => {
     setBrandingLoading(true);
-    setBrandingMsg(null);
-    // Save all keys in one batch upsert
     const entries = Object.entries(brandingForm).map(([key, value]) => ({ key, value: value || "" }));
-    const { error } = await supabase.from("branding").upsert(entries, { onConflict: "key" });
-    if (error) {
-      setBrandingLoading(false);
-      setBrandingMsg({ type: "error", text: "Save failed: " + error.message });
-      return;
+    for (const entry of entries) {
+      await supabase.from("branding").upsert(entry, { onConflict: "key" });
     }
     // Update localStorage cache + CSS variable so next visit shows updated branding instantly
     try {
@@ -1466,8 +1357,6 @@ function AdminScreen({ onSignOut }) {
     } catch (_) {}
     setBrandingLoading(false);
     setBrandingMsg({ type: "ok", text: "Branding saved! Changes are live on the landing page." });
-    // Trigger storage event for same-tab update (storage event only fires cross-tab normally)
-    window.dispatchEvent(new StorageEvent("storage", { key: "neet_branding_cache", newValue: JSON.stringify(brandingForm) }));
   };
 
   //  Styles 
@@ -1482,7 +1371,7 @@ function AdminScreen({ onSignOut }) {
   const filtered = questions.filter(q => (subFilter === "All" || q.subject === subFilter) && (!search || String(q.number).includes(search) || (q.question_text || "").toLowerCase().includes(search.toLowerCase())));
 
   return (
-    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()), color: "#e2e8f0" }}>
+    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "Georgia, serif", color: "#e2e8f0" }}>
       
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(168,85,247,0.2)", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ color: "#c084fc", fontWeight: 700, fontSize: "1rem" }}>CBT Admin Panel</span>
@@ -1507,7 +1396,7 @@ function AdminScreen({ onSignOut }) {
                 <button onClick={() => { setForm(aempty()); setEditId(null); setImgInfo(null); }} style={abtn("sm")}>Cancel</button>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 12 }}>
               <div>
                 <label style={alabel}>Q Number</label>
                 <input type="number" min="1" max="180" value={form.number} onChange={e => ff("number", e.target.value)} placeholder="e.g. 5" style={ainput} />
@@ -1516,25 +1405,6 @@ function AdminScreen({ onSignOut }) {
                 <label style={alabel}>Subject</label>
                 <select value={form.subject} onChange={e => ff("subject", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
                   {SUBJECTS.map(s => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={alabel}>Paper ID</label>
-                <input value={form.paper_id || "NEET_2025"} onChange={e => ff("paper_id", e.target.value)} placeholder="e.g. NEET_2025, BATCH_A" style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
-                <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>Which test set this belongs to</div>
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label style={alabel}>Chapter (optional)</label>
-                <input value={form.chapter || ""} onChange={e => ff("chapter", e.target.value)} placeholder="e.g. Kinematics, Optics" style={ainput} />
-              </div>
-              <div>
-                <label style={alabel}>Difficulty</label>
-                <select value={form.difficulty || "medium"} onChange={e => ff("difficulty", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
                 </select>
               </div>
             </div>
@@ -1571,20 +1441,46 @@ function AdminScreen({ onSignOut }) {
             </div>
             <div>
               <label style={alabel}>Options - click circle to mark correct answer</label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {["a","b","c","d"].map((lt, i) => {
                   const ok = String(i) === form.correct;
+                  const imgKey = "option_" + lt + "_image";
+                  const hasImg = !!form[imgKey];
                   return (
-                    <div key={lt} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div onClick={() => ff("correct", String(i))} style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: ok ? "#22c55e" : "rgba(255,255,255,0.07)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", border: ok ? "2px solid #4ade80" : "2px solid transparent" }}>
+                    <div key={lt} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      {/* Correct answer circle */}
+                      <div onClick={() => ff("correct", String(i))}
+                        style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", background: ok ? "#22c55e" : "rgba(255,255,255,0.07)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", border: ok ? "2px solid #4ade80" : "2px solid transparent" }}>
                         {lt.toUpperCase()}
                       </div>
-                      <input value={form["option_" + lt]} onChange={e => ff("option_" + lt, e.target.value)} placeholder={"Option " + lt.toUpperCase() + (ok ? " (correct)" : "")} style={{ ...ainput, flex: 1, borderColor: ok ? "rgba(34,197,94,0.4)" : undefined }} />
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                        {/* Option text */}
+                        <input value={form["option_" + lt]} onChange={e => ff("option_" + lt, e.target.value)}
+                          placeholder={"Option " + lt.toUpperCase() + (ok ? " (correct)" : "") + "  text or leave blank if image only"}
+                          style={{ ...ainput, borderColor: ok ? "rgba(34,197,94,0.4)" : undefined }} />
+                        {/* Option image */}
+                        {hasImg ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: "6px 10px" }}>
+                            <img src={form[imgKey]} alt={"opt " + lt.toUpperCase()} style={{ maxHeight: 60, maxWidth: 160, objectFit: "contain", borderRadius: 4 }} />
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <button onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try { const {b64}=await compressToBase64(f); ff(imgKey,b64); } catch(_){} }; inp.click(); }}
+                                style={{ ...abtn("primary"), fontSize: 10, padding: "3px 10px" }}>Replace</button>
+                              <button onClick={() => ff(imgKey, "")}
+                                style={{ ...abtn("danger"), fontSize: 10, padding: "3px 10px" }}>Remove</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try { const {b64}=await compressToBase64(f); ff(imgKey,b64); } catch(_){} }; inp.click(); }}
+                            style={{ ...abtn("ghost"), fontSize: 11, padding: "5px 12px", alignSelf: "flex-start" }}>
+                            + Add Image to Option {lt.toUpperCase()}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              <div style={{ color: "#475569", fontSize: 11, marginTop: 5 }}>{"Correct: Option " + ["A","B","C","D"][+form.correct]}</div>
+              <div style={{ color: "#475569", fontSize: 11, marginTop: 2 }}>{"Correct: Option " + ["A","B","C","D"][+form.correct]}  click the circle to set</div>
             </div>
             <div>
               <label style={alabel}>Solution</label>
@@ -2065,17 +1961,14 @@ function AdminScreen({ onSignOut }) {
                                   </div>
                                   {t.description && <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>{t.description}</div>}
                                   <div style={{ color:"#475569", fontSize:11, marginTop:4, display:"flex", gap:14, flexWrap:"wrap" }}>
-                                    <span>Paper: <span style={{ color:"#a5b4fc" }}>{t.paper_id}</span>
-                                    {t._qCount != null && <span style={{ marginLeft:6, color:t._qCount>0?"#4ade80":"#f87171", fontWeight:600, fontSize:11 }}>({t._qCount} Qs)</span>}
-                                    </span>
+                                    <span>Paper: <span style={{ color:"#a5b4fc" }}>{t.paper_id}</span></span>
                                     {st && <span>Start: {st.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
                                     {en && <span>End: {en.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
                                   </div>
                                 </div>
                                 <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                                   <button onClick={() => { setSelectedTest(t); loadTestReports(t.id); setBatchTestView("report"); }} style={{ ...abtn("primary"), padding:"7px 12px", fontSize:12 }}>Report</button>
-                                  <button onClick={() => { setPaperFilter(t.paper_id); setTab("list"); loadAll(t.paper_id); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Questions</button>
-                                  <button onClick={() => { setSelectedTest(t); setTestForm({ name:t.name, description:t.description||"", paper_id:t.paper_id, exam_window_start:t.exam_window_start||"", exam_window_end:t.exam_window_end||"", attempt_limit:String(t.attempt_limit||"1"), access_code:t.access_code||"", access_code_enabled:t.access_code_enabled||"false", resume_code:t.resume_code||"", status:t.status||"scheduled", manual_release:t.manual_release||"false", disable_submit:t.disable_submit||"false" }); setBatchTestView("edit"); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Edit</button>
+                                  <button onClick={() => { setSelectedTest(t); setTestForm({ name:t.name, description:t.description||"", paper_id:t.paper_id, exam_window_start:t.exam_window_start||"", exam_window_end:t.exam_window_end||"", attempt_limit:String(t.attempt_limit||"1"), access_code:t.access_code||"", access_code_enabled:t.access_code_enabled||"false", resume_code:t.resume_code||"", status:t.status||"scheduled", manual_release:t.manual_release||"false" }); setBatchTestView("edit"); }} style={{ ...abtn("ghost"), padding:"7px 12px", fontSize:12 }}>Edit</button>
                                   <button onClick={() => deleteTest(t.id)} style={{ ...abtn("danger"), padding:"7px 10px", fontSize:12 }}>Del</button>
                                 </div>
                               </div>
@@ -2152,15 +2045,6 @@ function AdminScreen({ onSignOut }) {
                         <div style={{ color:"#64748b", fontSize:11 }}>Force-show this test to students regardless of date</div>
                       </div>
                       <button onClick={()=>setTestForm(p=>({...p,manual_release:p.manual_release==="true"?"false":"true"}))} style={{ ...abtn(testForm.manual_release==="true"?"success":"ghost"), minWidth:70 }}>{testForm.manual_release==="true"?"ON":"OFF"}</button>
-                    </div>
-
-                    {/* Disable submit button toggle */}
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(239,68,68,0.05)", borderRadius:8, padding:"10px 14px", border:"1px solid rgba(239,68,68,0.15)" }}>
-                      <div>
-                        <div style={{ color:"#e2e8f0", fontSize:13 }}>Disable Early Submit</div>
-                        <div style={{ color:"#64748b", fontSize:11 }}>Hide the Submit button  test submits only when time ends</div>
-                      </div>
-                      <button onClick={()=>setTestForm(p=>({...p,disable_submit:p.disable_submit==="true"?"false":"true"}))} style={{ ...abtn(testForm.disable_submit==="true"?"danger":"ghost"), minWidth:70 }}>{testForm.disable_submit==="true"?"ON":"OFF"}</button>
                     </div>
 
                     <button onClick={batchTestView === "edit" ? saveTest : createBatchTest} style={{ ...abtn("success"), padding:"12px", fontSize:"1rem" }}>
@@ -2371,7 +2255,6 @@ function AdminScreen({ onSignOut }) {
             {/* Sub-tabs */}
             <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap:"wrap" }}>
               <button onClick={() => setStudentTab("results")}     style={abtn(studentTab === "results"     ? "primary" : "ghost")}>Exam Results</button>
-              <button onClick={() => setStudentTab("export")}      style={abtn(studentTab === "export"      ? "primary" : "ghost")}>Export Results</button>
               <button onClick={() => setStudentTab("studentcard")} style={abtn(studentTab === "studentcard" ? "primary" : "ghost")}>Student Report Card</button>
               <button onClick={() => setStudentTab("manage")}      style={abtn(studentTab === "manage"      ? "primary" : "ghost")}>Manage Students</button>
               <button onClick={() => setStudentTab("add")}         style={abtn(studentTab === "add"         ? "primary" : "ghost")}>Add Students via CSV</button>
@@ -2617,150 +2500,6 @@ function AdminScreen({ onSignOut }) {
 
         {/* BRANDING TAB */}
 
-            {/* EXPORT RESULTS SUB-TAB */}
-            {studentTab === "export" && (
-              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                <div>
-                  <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem", marginBottom:4 }}>Export Test Results</div>
-                  <div style={{ color:"#64748b", fontSize:12 }}>Search results by batch, test date, or paper ID. Export to CSV with full subject-wise breakdown.</div>
-                </div>
-
-                {exportMsg && <div style={mstyle(exportMsg)}>{exportMsg.text}</div>}
-
-                {/* Search filters */}
-                <div style={{ ...acard, padding:"18px 20px" }}>
-                  <div style={{ color:"#a5b4fc", fontWeight:600, fontSize:13, marginBottom:12 }}>Search / Filter</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10 }}>
-                    <div>
-                      <label style={alabel}>Batch Name</label>
-                      <input value={exportFilter.batchName} onChange={e=>setExportFilter(p=>({...p,batchName:e.target.value}))}
-                        placeholder="e.g. Batch_A" style={{ ...ainput, fontSize:12 }} />
-                    </div>
-                    <div>
-                      <label style={alabel}>Paper ID</label>
-                      <input value={exportFilter.paperId} onChange={e=>setExportFilter(p=>({...p,paperId:e.target.value}))}
-                        placeholder="e.g. SUN_A, BATCH_A" style={{ ...ainput, fontSize:12 }} />
-                    </div>
-                    <div>
-                      <label style={alabel}>Test Name</label>
-                      <input value={exportFilter.testName} onChange={e=>setExportFilter(p=>({...p,testName:e.target.value}))}
-                        placeholder="e.g. Sunday Test" style={{ ...ainput, fontSize:12 }} />
-                    </div>
-                    <div>
-                      <label style={alabel}>Date From</label>
-                      <input type="date" value={exportFilter.dateFrom} onChange={e=>setExportFilter(p=>({...p,dateFrom:e.target.value}))}
-                        style={{ ...ainput, fontSize:12 }} />
-                    </div>
-                    <div>
-                      <label style={alabel}>Date To</label>
-                      <input type="date" value={exportFilter.dateTo} onChange={e=>setExportFilter(p=>({...p,dateTo:e.target.value}))}
-                        style={{ ...ainput, fontSize:12 }} />
-                    </div>
-                    <div style={{ display:"flex", flexDirection:"column", justifyContent:"flex-end", gap:6 }}>
-                      <button
-                        onClick={async () => {
-                          setExportLoading(true);
-                          setExportMsg(null);
-                          try {
-                            let q = supabase.from("test_results")
-                              .select("id,student_name,student_email,batch_id,test_name,paper_id,score,correct,wrong,unattempted,percentile,subject_times,answers,created_at")
-                              .order("created_at", { ascending: false })
-                              .limit(1000);
-                            if (exportFilter.paperId)  q = q.ilike("paper_id",  "%" + exportFilter.paperId  + "%");
-                            if (exportFilter.testName) q = q.ilike("test_name", "%" + exportFilter.testName + "%");
-                            if (exportFilter.dateFrom) q = q.gte("created_at", exportFilter.dateFrom);
-                            if (exportFilter.dateTo)   q = q.lte("created_at", exportFilter.dateTo + "T23:59:59");
-                            const { data, error } = await q;
-                            if (error) { setExportMsg({ type:"error", text: error.message }); setExportLoading(false); return; }
-                            let rows = data || [];
-                            // Filter by batch name (join via batch_id  batches)
-                            if (exportFilter.batchName && rows.length > 0) {
-                              const { data: bData } = await supabase.from("batches").select("id,name").ilike("name", "%" + exportFilter.batchName + "%");
-                              const bIds = new Set((bData||[]).map(b => b.id));
-                              const bMap = Object.fromEntries((bData||[]).map(b => [b.id, b.name]));
-                              rows = rows.filter(r => bIds.has(r.batch_id));
-                              rows = rows.map(r => ({ ...r, batch_name: bMap[r.batch_id] || "" }));
-                            } else {
-                              // Fetch batch names for all rows
-                              const batchIds = [...new Set(rows.map(r => r.batch_id).filter(Boolean))];
-                              if (batchIds.length > 0) {
-                                const { data: bData } = await supabase.from("batches").select("id,name").in("id", batchIds);
-                                const bMap = Object.fromEntries((bData||[]).map(b => [b.id, b.name]));
-                                rows = rows.map(r => ({ ...r, batch_name: bMap[r.batch_id] || "" }));
-                              }
-                            }
-                            // Compute per-subject scores from answers + questions
-                            // We'll compute from what we have (subject_times for time, answers for marks)
-                            setExportRows(rows);
-                            setExportMsg({ type:"ok", text: rows.length + " results found. Click Download CSV to export." });
-                          } catch(e) { setExportMsg({ type:"error", text: e.message }); }
-                          setExportLoading(false);
-                        }}
-                        disabled={exportLoading}
-                        style={{ ...abtn("primary"), padding:"10px", opacity:exportLoading?0.6:1 }}>
-                        {exportLoading ? "Searching..." : "Search"}
-                      </button>
-                      <button onClick={() => setExportFilter({ dateFrom:"", dateTo:"", batchName:"", paperId:"", testName:"" })}
-                        style={{ ...abtn("ghost"), padding:"8px", fontSize:11 }}>Clear</button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Results preview + download */}
-                {exportRows.length > 0 && (
-                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <div style={{ color:"#a5b4fc", fontWeight:700 }}>{exportRows.length} results found</div>
-                      <button
-                        onClick={() => {
-                          const label = [exportFilter.batchName, exportFilter.testName, exportFilter.paperId].filter(Boolean).join("_") || "all";
-                          downloadReportsCSV(exportRows, label + "_results");
-                        }}
-                        style={{ ...abtn("success"), padding:"10px 20px" }}>
-                        Download CSV
-                      </button>
-                    </div>
-
-                    {/* Preview table */}
-                    <div style={{ overflowX:"auto" }}>
-                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 120px 90px 80px 70px 70px 70px", gap:6, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5, minWidth:600 }}>
-                        <div>#</div><div>Student</div><div>Test / Paper</div><div>Date</div>
-                        <div>Score</div><div style={{ color:"#4ade80" }}>Correct</div>
-                        <div style={{ color:"#f87171" }}>Wrong</div><div>Skip</div>
-                      </div>
-                      {exportRows.slice(0,20).map((r,i) => {
-                        const pct = Math.round((r.score/720)*100);
-                        const d = new Date(r.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
-                        return (
-                          <div key={r.id} style={{ display:"grid", gridTemplateColumns:"40px 1fr 120px 90px 80px 70px 70px 70px", gap:6, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center", minWidth:600 }}>
-                            <div style={{ color:"#475569", fontSize:11 }}>{i+1}</div>
-                            <div>
-                              <div style={{ color:"#e2e8f0", fontSize:12, fontWeight:600 }}>{r.student_name || r.student_email?.split("@")[0] || "Student"}</div>
-                              <div style={{ color:"#475569", fontSize:10 }}>{r.batch_name || ""} {r.student_email || ""}</div>
-                            </div>
-                            <div style={{ fontSize:10, color:"#94a3b8" }}>
-                              <div>{r.test_name || ""}</div>
-                              <div style={{ color:"#a5b4fc" }}>{r.paper_id}</div>
-                            </div>
-                            <div style={{ fontSize:11, color:"#64748b" }}>{d}</div>
-                            <div style={{ fontWeight:700, color:pct>=50?"#4ade80":"#f87171", fontSize:13 }}>{r.score}<span style={{ color:"#374151", fontSize:10 }}>/720</span></div>
-                            <div style={{ color:"#4ade80", fontWeight:600 }}>{r.correct}</div>
-                            <div style={{ color:"#f87171", fontWeight:600 }}>{r.wrong}</div>
-                            <div style={{ color:"#64748b" }}>{r.unattempted}</div>
-                          </div>
-                        );
-                      })}
-                      {exportRows.length > 20 && (
-                        <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
-                          Showing first 20 of {exportRows.length}. Download CSV for full data.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* STUDENT REPORT CARD SUB-TAB */}
             {studentTab === "studentcard" && (
               <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -2989,9 +2728,9 @@ function AdminScreen({ onSignOut }) {
                    : brandingForm.bg_type === "image" && brandingForm.bg_image_data ? { backgroundImage:"url("+brandingForm.bg_image_data+")", backgroundSize:"cover", backgroundPosition:"center" }
                    : { background:"linear-gradient(135deg,"+(brandingForm.bg_gradient_from||"#0f0c29")+" 0%,"+(brandingForm.bg_gradient_to||"#302b63")+" 100%)" }) }}>
                 {(brandingForm.logo_data || brandingForm.logo_url) && <img src={brandingForm.logo_data||brandingForm.logo_url} alt="logo" style={{ maxHeight:48, maxWidth:140, objectFit:"contain", borderRadius:4 }} />}
-                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:brandingForm.badge_color||"#c084fc", letterSpacing:1, fontFamily:brandingForm.font_family||"inherit" }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
-                <div style={{ color:brandingForm.title_color||"#fff", fontWeight:700, fontSize:"1.1rem", fontFamily:brandingForm.font_family||"inherit" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
-                <div style={{ color:brandingForm.tagline_color||"rgba(255,255,255,0.5)", fontSize:12, fontFamily:brandingForm.font_family||"inherit" }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
+                {brandingForm.show_badge !== "false" && <div style={{ background:"rgba(168,85,247,0.3)", borderRadius:99, padding:"3px 12px", fontSize:10, color:"#c084fc", letterSpacing:1 }}>{brandingForm.badge_text || "NTA NEET UG 2025"}</div>}
+                <div style={{ color:"#fff", fontWeight:700, fontSize:"1.1rem" }}>{brandingForm.platform_name || "Mock Test Platform"}</div>
+                <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>{brandingForm.platform_tagline || "Select your role to continue"}</div>
               </div>
             </div>
              {/* Logo */}
@@ -3021,62 +2760,6 @@ function AdminScreen({ onSignOut }) {
                 {brandingForm.show_badge !== "false" && <div><label style={alabel}>Badge Text</label><input value={brandingForm.badge_text||""} onChange={e=>setBrandingForm(p=>({...p,badge_text:e.target.value}))} placeholder="NTA NEET UG 2025" style={ainput} /></div>}
               </div>
             </div>
-            {/* Font & Colors */}
-            <div style={{ ...acard, padding:"18px 20px" }}>
-              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Font & Colors</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-
-                {/* Font family */}
-                <div>
-                  <label style={alabel}>Font</label>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {[
-                      ["Georgia, serif",           "Georgia"],
-                      ["'Crimson Pro', Georgia, serif", "Crimson Pro"],
-                      ["Arial, sans-serif",         "Arial"],
-                      ["'Trebuchet MS', sans-serif","Trebuchet"],
-                      ["'Courier New', monospace",  "Courier"],
-                    ].map(([val, label]) => (
-                      <button key={val}
-                        onClick={() => setBrandingForm(p => ({ ...p, font_family: val }))}
-                        style={{ ...abtn(brandingForm.font_family === val ? "primary" : "ghost"), fontSize: 12, padding: "6px 14px", fontFamily: val }}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ marginTop:8 }}>
-                    <label style={alabel}>Or enter custom font name</label>
-                    <input value={brandingForm.font_family||""} onChange={e=>setBrandingForm(p=>({...p,font_family:e.target.value}))}
-                      placeholder="e.g. 'Poppins', sans-serif"
-                      style={{ ...ainput, fontSize:12, fontFamily: brandingForm.font_family||"inherit" }} />
-                  </div>
-                </div>
-
-                {/* Text colors */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                  {[
-                    ["title_color",   "Title Color",   "#ffffff"],
-                    ["tagline_color", "Tagline Color", "#94a3b8"],
-                    ["badge_color",   "Badge Color",   "#c084fc"],
-                    ["card_text_color","Card Text",    "#a5b4fc"],
-                  ].map(([k, l, d]) => (
-                    <div key={k}>
-                      <label style={alabel}>{l}</label>
-                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                        <input type="color" value={brandingForm[k]||d}
-                          onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))}
-                          style={{ width:44, height:36, borderRadius:8, border:"none", cursor:"pointer" }} />
-                        <input value={brandingForm[k]||d}
-                          onChange={e=>setBrandingForm(p=>({...p,[k]:e.target.value}))}
-                          style={{ ...ainput, flex:1, fontFamily:"monospace", fontSize:12 }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-              </div>
-            </div>
-
              {/* Background */}
             <div style={{ ...acard, padding:"18px 20px" }}>
               <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:12 }}>Background</div>
@@ -3132,7 +2815,6 @@ function AdminScreen({ onSignOut }) {
 // AUTH SCREEN
 // 
 function AuthScreen({ onAuth }) {
-  const b = getBranding();
   const [mode, setMode] = useState("login"); // login | signup
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -3159,7 +2841,7 @@ function AuthScreen({ onAuth }) {
 
   return (
     <div style={{
-      minHeight: "100vh", ...brandingBg(getBranding()),
+      minHeight: "100vh", background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem"
     }}>
@@ -3247,7 +2929,7 @@ function AuthScreen({ onAuth }) {
 // 
 // DASHBOARD
 // 
-function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingMsg }) {
+function Dashboard({ user, onStart, onSignOut, settings }) {
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [batchConfig, setBatchConfig] = useState(null);
@@ -3388,10 +3070,6 @@ function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingM
   }, [tab]);
 
   const handleStart = () => {
-    // Guard: check attempt limit first
-    if (limitReached) { setAccessErr("You have used all " + attemptLimit + " allowed attempts for this test."); return; }
-    // Guard: check window
-    if (isWindowBlocked) { setAccessErr("Exam is not available right now."); return; }
     // Check access code using effective (batch-aware) settings
     if (eff?.access_code_enabled === "true" && eff?.access_code) {
       const entered = accessCode.replace(/\s/g, "");
@@ -3406,11 +3084,12 @@ function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingM
     if (eff?.exam_enabled === "false") { setAccessErr("Exam access is currently disabled."); return; }
     setAccessErr("");
     onStart(eff?.paper_id || "NEET_2025", nextTest ? {
-      batch_test_id:    nextTest.id,
-      batch_id:         nextTest.batch_id,
-      test_name:        nextTest.name,
-      exam_window_end:  nextTest.exam_window_end || null,
-      disable_submit:   nextTest.disable_submit === "true",
+      batch_test_id:     nextTest.id,
+      batch_id:          nextTest.batch_id,
+      test_name:         nextTest.name,
+      exam_window_start: nextTest.exam_window_start || null,
+      exam_window_end:   nextTest.exam_window_end   || null,
+      disable_submit:    nextTest.disable_submit === "true",
     } : null);
   };
 
@@ -3419,8 +3098,7 @@ function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingM
   const avgScore  = history.length ? Math.round(history.reduce((s, r) => s + r.score, 0) / history.length) : null;
 
   return (
-    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()) }}>
-
+    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
         @font-face { font-family: 'Kruti Dev 010'; src: local('Kruti Dev 010'); }
@@ -3505,17 +3183,6 @@ function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingM
       <style>{`@keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }`}</style>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
-
-        {/* Error message banner */}
-        {loadingMsg && (
-          <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f87171", flexShrink: 0 }} />
-              <span style={{ color: "#fca5a5", fontSize: 13 }}>{loadingMsg}</span>
-            </div>
-            <button onClick={() => setLoadingMsg(null)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 18, padding: "0 4px", flexShrink: 0 }}></button>
-          </div>
-        )}
 
         {batchConfig && (
           <div style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 10, padding: "8px 16px", marginBottom: nextTest ? 8 : 16, display: "flex", alignItems: "center", gap: 10 }}>
@@ -3721,10 +3388,9 @@ function Dashboard({ user, onStart, onSignOut, settings, loadingMsg, setLoadingM
 // INSTRUCTIONS
 // 
 function InstructionsScreen({ year, onBegin, onBack }) {
-  const b = getBranding();
   const [agreed, setAgreed] = useState(false);
   return (
-    <div style={{ minHeight: "100vh", ...brandingBg(b), fontFamily: brandingFont(b), padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", background: "#0f172a", fontFamily: "'Crimson Pro', Georgia, serif", padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ maxWidth: 780, width: "100%" }}>
         <div style={{ ...card(), overflow: "hidden" }}>
           <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 30px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -3851,7 +3517,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked, visited }) {
 // 
 // EXAM SCREEN
 // 
-function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disableSubmit }) {
+function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWindowStart, disableSubmit }) {
   const restoreSession = () => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
@@ -3870,18 +3536,33 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disabl
   const [visited,       setVisited]      = useState(new Set(saved?.visited ?? [0])); // track actually visited question indices
   const [bookmarks,     setBookmarks]    = useState(new Set(saved?.bookmarks ?? []));
   const [sel,           setSel]          = useState(null);
-  // Calculate time remaining: if window_end is set, timer counts down to that, else use TOTAL_TIME
+  // Calculate time remaining based on admin-set window (start  end)
+  // Timer is synchronized to wall-clock time, so all students see the same countdown
   const calcInitialTime = () => {
-    if (saved?.timeLeft != null) return saved.timeLeft; // restore session
-    const wEnd = settings?.exam_window_end ? new Date(settings.exam_window_end) : null;
-    const wStart = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
-    if (wEnd && wStart) {
-      const windowDuration = Math.round((wEnd - wStart) / 1000); // full window in seconds
-      const elapsed = Math.round((Date.now() - wStart.getTime()) / 1000); // already elapsed
-      const remaining = windowDuration - elapsed;
-      if (remaining > 0 && remaining < TOTAL_TIME) return remaining; // use window time
+    // If resuming a session, use saved time (already wall-clock-corrected)
+    if (saved?.timeLeft != null) {
+      // But re-validate against current wall time in case a long time has passed
+      const wEnd = examWindowEnd ? new Date(examWindowEnd) : null;
+      if (wEnd) {
+        const remaining = Math.round((wEnd - Date.now()) / 1000);
+        if (remaining <= 0) return 0;
+        // Use whichever is smaller: saved time or actual remaining
+        return Math.min(saved.timeLeft, remaining);
+      }
+      return saved.timeLeft;
     }
-    return TOTAL_TIME; // default 3 hours
+    // Primary: use admin-set exam window (batch test settings)
+    const wEnd   = examWindowEnd   ? new Date(examWindowEnd)   : null;
+    const wStart = examWindowStart ? new Date(examWindowStart) : null;
+    if (wEnd && wStart) {
+      const now = Date.now();
+      const remaining = Math.round((wEnd.getTime() - now) / 1000);
+      if (remaining <= 0) return 0; // window already ended
+      if (remaining > TOTAL_TIME) return TOTAL_TIME; // cap at 3h
+      return remaining; // exact seconds left in the window right now
+    }
+    // Fallback: full 3-hour exam with no window set
+    return TOTAL_TIME;
   };
   const [timeLeft,      setTimeLeft]     = useState(calcInitialTime);
   const [showModal,     setShowModal]    = useState(false);
@@ -3907,29 +3588,20 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disabl
   // Mark first question as visited on mount
   useEffect(() => { setVisited(p => { const n = new Set(p); n.add(0); return n; }); }, []);
 
-  // Prefetch ALL images for current subject in background when subject changes
-  // This batches one query per subject instead of one per question
+  // Lazy-load diagram images for current question on demand
   useEffect(() => {
-    if (!q?.subject || !questions?.length) return;
-    const subjQs = questions.filter(sq => sq.subject === q.subject && !sq.diagram_data);
-    if (!subjQs.length) return; // all images already loaded for this subject
-    const ids = subjQs.map(sq => sq.id);
+    if (!q?.id) return;
+    if (q.diagram_data || q.solution_diagram_data) return; // already have it
     supabase.from("questions")
       .select("id, diagram_data, solution_diagram_data")
-      .in("id", ids)
+      .eq("id", q.id)
+      .single()
       .then(({ data }) => {
-        if (!data) return;
-        // Patch images into the questions array in-place
-        data.forEach(row => {
-          const target = questions.find(sq => sq.id === row.id);
-          if (target) {
-            if (row.diagram_data)          target.diagram_data          = row.diagram_data;
-            if (row.solution_diagram_data) target.solution_diagram_data = row.solution_diagram_data;
-          }
-        });
+        if (data?.diagram_data)          q.diagram_data          = data.diagram_data;
+        if (data?.solution_diagram_data) q.solution_diagram_data = data.solution_diagram_data;
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q?.subject]);
+  }, [q?.id]);
 
   // Webcam setup if enabled
   useEffect(() => {
@@ -4012,6 +3684,12 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disabl
       }
       setTimeLeft(t => {
         if (t <= 1) { clearInterval(timerRef.current); doFinish(); return 0; }
+        // Re-sync with wall clock every 60 ticks to prevent drift
+        if (examWindowEnd && t % 60 === 0) {
+          const wallRemaining = Math.round((new Date(examWindowEnd) - Date.now()) / 1000);
+          if (wallRemaining <= 0) { clearInterval(timerRef.current); doFinish(); return 0; }
+          if (Math.abs(wallRemaining - t) > 5) return wallRemaining; // correct drift >5s
+        }
         if (t === 1800) setTimerAlert("30min");
         if (t === 900)  setTimerAlert("15min");
         if (t === 300)  setTimerAlert("5min");
@@ -4124,7 +3802,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disabl
   const subjectColors = ["#6366f1","#f59e0b","#22c55e","#f43f5e"];
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()), color: "#e2e8f0" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
       
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 12 }}>
         <div>
@@ -4154,12 +3832,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disabl
             <span style={{ color: timerClr, fontSize: 18 }}></span>
             <span style={{ color: timerClr, fontFamily: "monospace", fontSize: "1.1rem", fontWeight: 700 }}>{fmt(timeLeft)}</span>
           </div>
-          {!disableSubmit && (
-            <button onClick={() => setShowModal(true)} style={btn("danger", { padding: "8px 16px", fontSize: 12 })}>Submit</button>
-          )}
-          {disableSubmit && (
-            <div style={{ fontSize: 11, color: "#64748b", padding: "6px 10px" }}>Auto-submit at end</div>
-          )}
+          <button onClick={() => setShowModal(true)} style={btn("danger", { padding: "8px 16px", fontSize: 12 })}>Submit</button>
         </div>
       </div>
 
@@ -4343,7 +4016,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, disabl
 // 
 // RESULT SCREEN
 // 
-function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSignOut }) {
+function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
   const [expandId,    setExpandId]    = useState(null);
   const [filterSub,   setFilterSub]   = useState("All");
   const [filterStatus,setFilterStatus]= useState("All");
@@ -4393,33 +4066,13 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
   });
 
   // PDF download
-  const downloadPDF = async () => {
-    // Re-fetch full question data (options + images) before building PDF
+  const downloadPDF = () => {
     const win = window.open("", "_blank");
     if (!win) return;
-    win.document.write("<html><body style='font-family:Arial;padding:40px;color:#333'><h2>Generating PDF...</h2><p>Please wait while we load question data.</p></body></html>");
-
-    let fullQuestions = questions;
-    try {
-      const ids = questions.map(q => q.id).filter(Boolean);
-      if (ids.length > 0) {
-        const { data } = await supabase.from("questions")
-          .select("id, number, subject, question_text, equation, option_a, option_b, option_c, option_d, correct, solution_text, solution_eq, diagram_data, solution_diagram_data")
-          .in("id", ids);
-        if (data && data.length > 0) {
-          // Merge full data into questions array
-          const map = {};
-          data.forEach(q => { map[q.id] = q; });
-          fullQuestions = questions.map(q => map[q.id] ? { ...q, ...map[q.id] } : q);
-        }
-      }
-    } catch (_) {}
-
-    win.document.open();
     const OPTS = ["A","B","C","D"];
     // Subject-wise summary
     const subjSummary = ["Physics","Chemistry","Botany","Zoology"].map(s => {
-      const sq = fullQuestions.filter(q => q.subject === s);
+      const sq = questions.filter(q => q.subject === s);
       const c  = sq.filter(q => answers[q.id] === q.correct).length;
       const w  = sq.filter(q => answers[q.id] !== undefined && answers[q.id] !== q.correct).length;
       const u  = sq.filter(q => answers[q.id] === undefined).length;
@@ -4427,7 +4080,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
       return "<tr><td><b>" + s + "</b></td><td style='color:green'>" + c + "</td><td style='color:red'>" + w + "</td><td style='color:gray'>" + u + "</td><td><b>" + sc + "</b></td></tr>";
     }).join("");
     // Full question list with solutions
-    const qRows = fullQuestions.map(q => {
+    const qRows = questions.map(q => {
       const ua = answers[q.id];
       const isC = ua === q.correct;
       const isW = ua !== undefined && !isC;
@@ -4437,12 +4090,14 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
       const color  = isC ? "#16a34a" : isW ? "#dc2626" : "#6b7280";
       const optRows = ["a","b","c","d"].map((lt, i) => {
         const optText = q["option_" + lt] || "";
+        const optImg  = q["option_" + lt + "_image"] || "";
         const isAns   = ua === i;
         const isRight = q.correct === i;
         let bg = "transparent";
         if (isRight) bg = "#dcfce7";
         if (isAns && !isRight) bg = "#fee2e2";
-        return "<div style='padding:4px 10px;margin:2px 0;background:" + bg + ";border-radius:4px;font-size:12px'><b>" + OPTS[i] + ") </b>" + optText + (isRight?" <span style='color:green'>(correct)</span>":"") + (isAns&&!isRight?" <span style='color:red'>(your answer)</span>":"") + "</div>";
+        const imgTag = optImg ? "<br/><img src='" + optImg + "' style='max-height:80px;max-width:200px;object-fit:contain;margin-top:4px;display:block;border-radius:4px;'/>" : "";
+        return "<div style='padding:6px 10px;margin:3px 0;background:" + bg + ";border-radius:4px;font-size:12px'><b>" + OPTS[i] + ") </b>" + optText + imgTag + (isRight?" <span style='color:green'>(correct)</span>":"") + (isAns&&!isRight?" <span style='color:red'>(your answer)</span>":"") + "</div>";
       }).join("");
       const timeS = timePerQ[q.id] || 0;
       return "<div style='margin-bottom:18px;padding:14px;border:1px solid #e5e7eb;border-left:4px solid " + color + ";border-radius:6px;page-break-inside:avoid'>" +
@@ -4451,19 +4106,14 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
         "<span style='background:" + (isC?"#dcfce7":isW?"#fee2e2":"#f9fafb") + ";color:" + color + ";padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700'>" + status + " " + marks + "</span>" +
         "</div>" +
         "<p style='margin:0 0 10px;font-size:13px;color:#1f2937'>" + (q.question_text || q.equation || "") + "</p>" +
-        (q.diagram_data ? "<img src='" + q.diagram_data + "' style='max-width:100%;max-height:200px;object-fit:contain;margin:6px 0;display:block;'/>" : "") +
         optRows +
-        (q.solution_text ? "<div style='margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af'><b>Solution: </b>" + q.solution_text + (q.solution_diagram_data ? "<br/><img src='" + q.solution_diagram_data + "' style='max-width:100%;max-height:160px;margin-top:6px;display:block;'/>" : "") + "</div>" : "") +
+        (q.solution_text ? "<div style='margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af'><b>Solution: </b>" + q.solution_text + "</div>" : "") +
         "<div style='margin-top:6px;font-size:10px;color:#9ca3af'>Time spent: " + (Math.floor(timeS/60)+"m "+timeS%60+"s") + "</div>" +
         "</div>";
     }).join("");
 
     const pdfTitle = meta?.testName || ("NEET " + year + " Mock Test");
-    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title>" +
-      "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css\">" +
-      "<script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js\"></scr" + "ipt>" +
-      "<script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js\"></scr" + "ipt>" +
-      "<style>" +
+    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title><style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
       "h2{color:#312e81;margin-top:28px}" +
@@ -4474,7 +4124,6 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
       "th{background:#312e81;color:#fff;padding:8px 10px;font-size:12px;text-align:left}" +
       "td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f3f4f6}" +
       "@media print{.noprint{display:none}}" +
-      ".katex{font-size:1em!important}" +
       "</style></head><body>" +
       "<h1>" + pdfTitle + " - Report</h1>" +
       "<p style='color:#6b7280;font-size:13px'>Generated on " + new Date().toLocaleString("en-IN") + "</p>" +
@@ -4493,19 +4142,6 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green border = correct &nbsp;|&nbsp; Red border = wrong &nbsp;|&nbsp; Gray border = unattempted</p>" +
       qRows +
       "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
-      "<scr" + "ipt>" +
-        "document.addEventListener('DOMContentLoaded', function() {" +
-          "if (window.renderMathInElement) {" +
-            "renderMathInElement(document.body, {" +
-              "delimiters: [" +
-                "{left:'$$',right:'$$',display:true}," +
-                "{left:'$',right:'$',display:false}" +
-              "]," +
-              "throwOnError: false" +
-            "});" +
-          "}" +
-        "});" +
-      "</scr" + "ipt>" +
       "</body></html>");
     win.document.close();
   };
@@ -4519,23 +4155,16 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
   const rank_band = pct >= 65 ? { label: "Excellent", color: "#4ade80" } : pct >= 50 ? { label: "Good", color: "#fbbf24" } : pct >= 35 ? { label: "Average", color: "#f59e0b" } : { label: "Needs Work", color: "#f87171" };
 
   return (
-    <div style={{ minHeight: "100vh", ...brandingBg(getBranding()), fontFamily: brandingFont(getBranding()), color: "#e2e8f0", paddingBottom: 60 }}>
+    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0", paddingBottom: 60 }}>
      
       <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>{meta?.testName || ("Test Completed - NEET " + year)}</h2>
           <p style={{ color: "#818cf8", margin: 0, fontSize: 14 }}>Detailed Performance Analysis</p>
         </div>
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
-            Download PDF Report
-          </button>
-          {onSignOut && (
-            <button onClick={onSignOut} style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.3)", color:"#f87171", borderRadius:8, padding:"9px 18px", cursor:"pointer", fontSize:13, fontFamily:"inherit" }}>
-              Sign Out
-            </button>
-          )}
-        </div>
+        <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
+          Download PDF Report
+        </button>
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "22px 16px" }}>
@@ -4882,34 +4511,20 @@ export default function App() {
     } catch (_) { return {}; }
   });
   const [brandingReady,setBrandingReady]= useState(true);
-  const [examWindowEnd, setExamWindowEnd] = useState(null); // ISO string of window end for auto-submit
-  const [disableSubmit, setDisableSubmit] = useState(false); // hide submit button when admin disables early submit
+  const [examWindowEnd,   setExamWindowEnd]   = useState(null); // ISO string of window end
+  const [examWindowStart, setExamWindowStart] = useState(null); // ISO string of window start (for timer)
+  const [disableSubmit,   setDisableSubmit]   = useState(false); // hide submit button
+  const [loadingMsg,      setLoadingMsg]      = useState(null); // user-friendly error message
   const [loadingQ,     setLoadingQ]     = useState(false);
   const [loadingError, setLoadingError] = useState(null);
-  const [loadingMsg,   setLoadingMsg]   = useState(null); // user-friendly error message
   const darkMode = true; // always dark
   const hindiMode = false;
   const [settings,     setSettings]     = useState({});   // platform_settings from Supabase
 
   // Sync theme to global context so all components can read it
   ThemeCtx.dark = darkMode;
-  ThemeCtx.branding = branding;
-
-  // Flush any pending result saves from previous session (retry on reconnect)
-  useEffect(() => { flushPendingResults(); }, []);
 
   // Load platform settings + branding from Supabase on mount
-  // Reload branding from localStorage whenever it changes (e.g. admin saves)
-  useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key === "neet_branding_cache" && e.newValue) {
-        try { setBranding(JSON.parse(e.newValue)); } catch (_) {}
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
   useEffect(() => {
     (async () => {
       try {
@@ -4924,6 +4539,11 @@ export default function App() {
           setBranding(b);
           try {
             localStorage.setItem("neet_branding_cache", JSON.stringify(b));
+            var bg = b.bg_type === "solid" && b.bg_solid_color ? b.bg_solid_color
+              : b.bg_type === "image" && b.bg_image_data ? "url(" + b.bg_image_data + ") center/cover no-repeat"
+              : b.bg_gradient_from && b.bg_gradient_to ? "linear-gradient(135deg," + b.bg_gradient_from + " 0%," + b.bg_gradient_to + " 50%," + b.bg_gradient_from + " 100%)"
+              : "";
+            if (bg) document.documentElement.style.setProperty("--landing-bg", bg);
           } catch (_) {}
         }
         setBrandingReady(true);
@@ -5017,68 +4637,34 @@ export default function App() {
     const usePaperId = paperId || "NEET_2025";
     if (testMeta) setActiveTest(testMeta);
     else setActiveTest(null);
+    // Store the exam window end so ExamScreen can auto-submit at the right time
     setExamWindowEnd(testMeta?.exam_window_end || null);
+    setExamWindowStart(testMeta?.exam_window_start || null);
     setDisableSubmit(testMeta?.disable_submit === true);
     setYear(2025);
     setLoadingQ(true);
     setLoadingError(null);
 
-    const CACHE_KEY = "neet_q_cache_" + usePaperId;
-    const CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-    // Try cache first  handles both old format (plain array) and new format ({data,ts})
-    try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Support both formats: plain array OR {data:[], ts:number}
-        const cachedQs = Array.isArray(parsed) ? parsed : parsed?.data;
-        const ts = Array.isArray(parsed) ? 0 : (parsed?.ts || 0);
-        if (Array.isArray(cachedQs) && cachedQs.length > 0 && (Date.now() - ts) < CACHE_TTL) {
-          setQuestions(cachedQs);
-          setLoadingQ(false);
-          setScreen(SCREEN.INSTRUCTIONS);
-          return;
-        }
-        // Clear corrupt or expired cache
-        if (!Array.isArray(cachedQs) || cachedQs.length === 0) {
-          localStorage.removeItem(CACHE_KEY);
-        }
-      }
-    } catch (_) {
-      try { localStorage.removeItem(CACHE_KEY); } catch (__) {}
-    }
-
-    // Fetch from DB
     const { questions: remote, error } = await sbFetchQuestions(usePaperId);
 
     if (error) {
-      console.error("[CBT] Question load error:", error);
-      // Try stale cache as last resort
-      try {
-        const raw = localStorage.getItem(CACHE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const cachedQs = Array.isArray(parsed) ? parsed : parsed?.data;
-          if (Array.isArray(cachedQs) && cachedQs.length > 0) {
-            setQuestions(cachedQs);
-            setLoadingQ(false);
-            setScreen(SCREEN.INSTRUCTIONS);
-            return;
-          }
-        }
-      } catch (_) {}
-      setLoadingMsg("Unable to load exam questions. Please contact your administrator.");
+      // Try localStorage cache as fallback
+      const cached = localStorage.getItem("neet_questions_cache_" + usePaperId);
+      if (cached) {
+        try {
+          setQuestions(JSON.parse(cached));
+          setLoadingQ(false);
+          setScreen(SCREEN.INSTRUCTIONS);
+          return;
+        } catch (_) {}
+      }
+      setLoadingError(error);
       setLoadingQ(false);
-      setScreen(SCREEN.DASHBOARD);
       return;
     }
 
-
-    // Store in cache with timestamp
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ data: remote, ts: Date.now() }));
-    } catch (_) {}
+    // Cache for offline resilience
+    try { localStorage.setItem("neet_questions_cache_" + usePaperId, JSON.stringify(remote)); } catch (_) {}
 
     setQuestions(remote);
     setLoadingQ(false);
@@ -5166,7 +4752,7 @@ export default function App() {
 
   if (loadingQ) {
     return (
-      <div style={{ height: "100vh", ...brandingBg(getBranding()), display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, fontFamily: brandingFont(getBranding()) }}>
+      <div style={{ height: "100vh", background: "#070d1a", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, fontFamily: "Georgia, serif" }}>
         <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid rgba(99,102,241,0.3)", borderTop: "3px solid #6366f1", animation: "spin 0.8s linear infinite" }} />
         <div style={{ color: "#818cf8", fontSize: "1rem" }}>Loading question bank</div>
         <div style={{ color: "#475569", fontSize: 13 }}>Connecting to Supabase</div>
@@ -5176,7 +4762,113 @@ export default function App() {
   }
 
   // Show a clear error screen if questions failed to load
-  // Error screen suppressed  failures redirect to dashboard silently
+  if (loadingError) {
+    // Detect what kind of error to show the right fix
+    const isConfig   = loadingError.includes("not set") || loadingError.includes("placeholder") || loadingError.includes("trailing slash") || loadingError.includes("starts with");
+    const isNoData   = loadingError.includes("No questions found");
+    const isRLS      = loadingError.includes("Permission denied") || loadingError.includes("policy");
+    const isNetwork  = loadingError.includes("Network error") || loadingError.includes("internet");
+    const isTable    = loadingError.includes("does not exist");
+    const isKey      = loadingError.includes("API key") || loadingError.includes("anon key");
+
+    const steps = isConfig ? [
+      "Open src/App.jsx in VS Code",
+      "Go to supabase.com  your project  Settings  API",
+      "Copy Project URL  paste on line 8 (replace the placeholder)",
+      "Copy anon public key  paste on line 9",
+      "Save the file (Ctrl+S)  page will auto-reload",
+    ] : isNoData ? [
+      "Go to supabase.com  your project  SQL Editor",
+      "Paste the INSERT questions SQL from the earlier step",
+      "Make sure paper_id = 'NEET_2025' in every row",
+      "Click Run, then try again",
+    ] : isRLS ? [
+      "Go to supabase.com  your project  SQL Editor",
+      "Run: create policy \"read questions\" on questions for select to authenticated using (true);",
+      "Save and try again",
+    ] : isTable ? [
+      "Go to supabase.com  your project  SQL Editor",
+      "Run the full table creation SQL from the setup step",
+      "Then insert your questions and try again",
+    ] : isKey ? [
+      "Go to supabase.com  your project  Settings  API",
+      "Copy the anon public key (starts with eyJ)",
+      "Paste it on line 9 of src/App.jsx",
+      "Save the file",
+    ] : isNetwork ? [
+      "Check your internet connection",
+      "Verify SUPABASE_URL in App.jsx line 8 has no typos",
+      "Make sure the URL has no trailing slash",
+      "Try refreshing the page",
+    ] : [
+      "Open browser console (F12  Console tab)",
+      "Click Begin Mock Test again",
+      "Read the red error message and share it for help",
+    ];
+
+    return (
+      <div style={{ height: "100vh", background: "#070d1a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", padding: 24 }}>
+        <div style={{ maxWidth: 560, width: "100%", background: "#0f172a", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: 32 }}>
+          
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}></div>
+            <div>
+              <div style={{ color: "#f87171", fontWeight: 700, fontSize: "1.1rem" }}>Could not load questions</div>
+              <div style={{ color: "#64748b", fontSize: 13, marginTop: 2 }}>Supabase returned an error</div>
+            </div>
+          </div>
+
+          
+          <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "12px 16px", marginBottom: 24, color: "#fca5a5", fontSize: 14, lineHeight: 1.7 }}>
+            {loadingError}
+          </div>
+
+          
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
+              {isConfig ? " How to fix  set your credentials:" :
+               isNoData ? " How to fix  add questions to Supabase:" :
+               isRLS    ? " How to fix  add a security policy:" :
+               isTable  ? " How to fix  create the table:" :
+               isKey    ? " How to fix  update your API key:" :
+               isNetwork? " How to fix  connection issue:" :
+                          " How to debug:"}
+            </div>
+            <ol style={{ margin: 0, paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 2 }}>
+              {steps.map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+          </div>
+
+         
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button
+              onClick={() => { setLoadingError(null); handleStartYear(); }}
+              style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 24px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
+            >
+               Retry
+            </button>
+            <button
+              onClick={() => {
+                setLoadingError(null);
+                setYear(2025);
+                setQuestions(buildLocalQuestions(2025));
+                setScreen(SCREEN.INSTRUCTIONS);
+              }}
+              style={{ background: "rgba(255,255,255,0.07)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "11px 24px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
+            >
+               Use Demo Questions Instead
+            </button>
+            <button
+              onClick={() => setLoadingError(null)}
+              style={{ background: "transparent", color: "#64748b", border: "none", borderRadius: 10, padding: "11px 16px", cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
+            >
+               Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -5270,13 +4962,12 @@ export default function App() {
       {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} />}
       {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
-      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} loadingMsg={loadingMsg} setLoadingMsg={setLoadingMsg} />}
+      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} />}
       {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} />}
-      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} disableSubmit={disableSubmit} />}
+      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} examWindowStart={examWindowStart} disableSubmit={disableSubmit} />}
       {screen === SCREEN.RESULT       && (
         <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta}
-          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }}
-          onSignOut={handleSignOut} />
+          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }} />
       )}
     </>
   );
