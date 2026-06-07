@@ -1168,7 +1168,7 @@ function AdminScreen({ onSignOut }) {
     const { byStudent, totalMarks, classAvg, classMax, classMin } = analyticsData;
     const pid = paperFilter || "PAPER_01";
     const win = window.open("", "_blank");
-    if (!win) return;
+    if (!win) { alert("Please allow popups for this site to download PDF reports."); return; }
     const rows = byStudent.map((s,i) => {
       const pct = Math.round(s.avg/totalMarks*100);
       const col = pct>=50?"#16a34a":"#dc2626";
@@ -1211,7 +1211,7 @@ function AdminScreen({ onSignOut }) {
   };
 
   // Generate per-student PDF report (same format as student sees after exam)
-  const downloadStudentPDF = (student, questions) => {
+  const downloadStudentPDF = (student, questions, reuseWindow = false) => {
     if (!student || !questions?.length) return;
     // Use most recent attempt
     const result = student.rawResults[0];
@@ -2866,11 +2866,15 @@ function AdminScreen({ onSignOut }) {
                                     <div style={{ color:"#64748b", fontSize:12 }}>{s.attempts} attempt(s) &nbsp;|&nbsp; Best: {s.max}/{analyticsData.totalMarks} &nbsp;|&nbsp; Avg: {s.avg}/{analyticsData.totalMarks}</div>
                                   </div>
                                   <button
-                                    onClick={() => {
-                                      supabase.from("questions")
+                                    onClick={async () => {
+                                      const win = window.open("", "_blank");
+                                      if (!win) { alert("Please allow popups for this site to download PDF reports."); return; }
+                                      win.document.write("<html><body style='font-family:Arial;padding:40px;color:#333'><h2>Loading report...</h2><p>Please wait while the report is generated.</p></body></html>");
+                                      const { data } = await supabase.from("questions")
                                         .select("id,number,subject,question_text,equation,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,diagram_data")
-                                        .eq("paper_id", paperFilter || "PAPER_01").order("number", { ascending:true })
-                                        .then(({ data }) => downloadStudentPDF(s, data || []));
+                                        .eq("paper_id", paperFilter || "PAPER_01").order("number", { ascending:true });
+                                      win.close();
+                                      downloadStudentPDF(s, data || [], true);
                                     }}
                                     style={{ ...abtn("primary"), fontSize:12, padding:"7px 16px" }}>
                                     Download PDF Report (Latest Attempt)
@@ -2896,12 +2900,16 @@ function AdminScreen({ onSignOut }) {
                                           <div style={{ fontSize:11, marginTop:2 }}><span style={{ color:"#4ade80" }}>{r.correct}C </span><span style={{ color:"#f87171" }}>{r.wrong}W </span><span style={{ color:"#64748b" }}>{r.unattempted}S</span></div>
                                         </div>
                                         <button
-                                          onClick={() => {
+                                          onClick={async () => {
                                             const sa = { ...s, rawResults: [r] };
-                                            supabase.from("questions")
+                                            const win = window.open("", "_blank");
+                                            if (!win) { alert("Please allow popups for this site to download PDF reports."); return; }
+                                            win.document.write("<html><body style='font-family:Arial;padding:40px;color:#333'><h2>Loading...</h2></body></html>");
+                                            const { data } = await supabase.from("questions")
                                               .select("id,number,subject,question_text,equation,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,diagram_data")
-                                              .eq("paper_id", r.paper_id || paperFilter || "PAPER_01").order("number", { ascending:true })
-                                              .then(({ data }) => downloadStudentPDF(sa, data || []));
+                                              .eq("paper_id", r.paper_id || paperFilter || "PAPER_01").order("number", { ascending:true });
+                                            win.close();
+                                            downloadStudentPDF(sa, data || [], true);
                                           }}
                                           style={{ ...abtn("ghost"), fontSize:11, padding:"6px 12px", flexShrink:0 }}>PDF
                                         </button>
