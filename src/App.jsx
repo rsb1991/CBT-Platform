@@ -1032,7 +1032,8 @@ function AdminScreen({ onSignOut }) {
   useEffect(() => { if (tab === "batches") loadBatches(); }, [tab]);
 
   // Load question analytics
-  const [analyticsSubTab, setAnalyticsSubTab] = useState("students"); // students | questions
+  const [analyticsSubTab,    setAnalyticsSubTab]    = useState("students"); // students | questions
+  const [selectedStudent,    setSelectedStudent]    = useState(null); // student object for detail view
 
   const loadAnalytics = async () => {
     setAnalyticsLoading(true);
@@ -1065,19 +1066,21 @@ function AdminScreen({ onSignOut }) {
       const key = r.student_email || r.id;
       if (!studentMap[key]) {
         studentMap[key] = {
-          name:    r.student_name || r.student_email?.split("@")[0] || "Student",
-          email:   r.student_email || "",
-          scores:  [],
-          correct: [],
-          wrong:   [],
+          name:        r.student_name || r.student_email?.split("@")[0] || "Student",
+          email:       r.student_email || "",
+          scores:      [],
+          correct:     [],
+          wrong:       [],
           unattempted: [],
-          attempts: 0,
+          attempts:    0,
+          rawResults:  [], // store full result rows for detailed view
         };
       }
       studentMap[key].scores.push(r.score || 0);
       studentMap[key].correct.push(r.correct || 0);
       studentMap[key].wrong.push(r.wrong || 0);
       studentMap[key].unattempted.push(r.unattempted || 0);
+      studentMap[key].rawResults.push(r);
       studentMap[key].attempts++;
     });
 
@@ -1202,6 +1205,117 @@ function AdminScreen({ onSignOut }) {
       "</div>" +
       "<table><thead><tr><th>#</th><th>Student</th><th>Attempts</th><th>Latest</th><th>Average</th><th>Best</th><th>Lowest</th><th>Avg%</th></tr></thead>" +
       "<tbody>" + rows + "</tbody></table>" +
+      "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
+      "</body></html>");
+    win.document.close();
+  };
+
+  // Generate per-student PDF report (same format as student sees after exam)
+  const downloadStudentPDF = (student, questions) => {
+    if (!student || !questions?.length) return;
+    // Use most recent attempt
+    const result = student.rawResults[0];
+    if (!result) return;
+    let answers = result.answers;
+    if (typeof answers === "string") { try { answers = JSON.parse(answers); } catch (_) { answers = {}; } }
+    answers = answers || {};
+    const subTimes = result.subject_times || {};
+    const OPTS = ["A","B","C","D"];
+    const SUBJECTS = ["Physics","Chemistry","Botany","Zoology"];
+    const correct    = result.correct || 0;
+    const wrong      = result.wrong || 0;
+    const unattempted= result.unattempted || 0;
+    const score      = result.score || 0;
+    const totalMarks = (result.total || questions.length) * 4;
+    const pct        = Math.round(score / totalMarks * 100);
+
+    const predictRankLocal = (sc) => {
+      if (sc >= 700) return "Under 100";
+      if (sc >= 650) return "100 - 1,000";
+      if (sc >= 600) return "1,000 - 10,000";
+      if (sc >= 540) return "10,000 - 50,000";
+      if (sc >= 500) return "50,000 - 1,00,000";
+      if (sc >= 450) return "1,00,000 - 2,50,000";
+      if (sc >= 400) return "2,50,000 - 5,00,000";
+      if (sc >= 360) return "5,00,000 - 8,00,000";
+      return "Above 8,00,000";
+    };
+
+    const subjSummary = SUBJECTS.map(s => {
+      const sq = questions.filter(q => q.subject === s);
+      const c  = sq.filter(q => answers[q.id] === q.correct).length;
+      const w  = sq.filter(q => answers[q.id] !== undefined && answers[q.id] !== q.correct).length;
+      const u  = sq.filter(q => answers[q.id] === undefined).length;
+      const sc = c * 4 + w * (-1);
+      const t  = subTimes[s] || 0;
+      return "<tr><td><b>" + s + "</b></td><td style='color:green'>" + c + "</td><td style='color:red'>" + w +
+        "</td><td style='color:gray'>" + u + "</td><td><b>" + sc + "</b></td>" +
+        "<td>" + Math.floor(t/60) + "m " + (t%60) + "s</td></tr>";
+    }).join("");
+
+    const qRows = questions.map(q => {
+      const ua    = answers[q.id];
+      const isC   = ua === q.correct;
+      const isW   = ua !== undefined && !isC;
+      const status = isC ? "CORRECT" : isW ? "WRONG" : "UNATTEMPTED";
+      const marks  = isC ? "+4" : isW ? "-1" : "0";
+      const color  = isC ? "#16a34a" : isW ? "#dc2626" : "#6b7280";
+      const optRows = ["a","b","c","d"].map((lt, i) => {
+        const optText = q["option_" + lt] || "";
+        const optImg  = q["option_" + lt + "_image"] || "";
+        const isAns   = ua === i;
+        const isRight = q.correct === i;
+        let bg = "transparent";
+        if (isRight) bg = "#dcfce7";
+        if (isAns && !isRight) bg = "#fee2e2";
+        const imgTag = optImg ? "<br/><img src='" + optImg + "' style='max-height:80px;max-width:200px;object-fit:contain;margin-top:4px;display:block;border-radius:4px;'/>" : "";
+        return "<div style='padding:6px 10px;margin:3px 0;background:" + bg + ";border-radius:4px;font-size:12px'>" +
+          "<b>" + OPTS[i] + ") </b>" + optText + imgTag +
+          (isRight ? " <span style='color:green'>(correct)</span>" : "") +
+          (isAns && !isRight ? " <span style='color:red'>(your answer)</span>" : "") +
+          "</div>";
+      }).join("");
+      return "<div style='margin-bottom:18px;padding:14px;border:1px solid #e5e7eb;border-left:4px solid " + color + ";border-radius:6px;page-break-inside:avoid'>" +
+        "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
+        "<span style='font-weight:700;color:#374151'>Q" + q.number + " &nbsp;<span style='background:#f3f4f6;padding:2px 8px;border-radius:4px;font-size:11px'>" + q.subject + "</span></span>" +
+        "<span style='background:" + (isC?"#dcfce7":isW?"#fee2e2":"#f9fafb") + ";color:" + color + ";padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700'>" + status + " " + marks + "</span>" +
+        "</div>" +
+        "<p style='margin:0 0 10px;font-size:13px;color:#1f2937'>" + (q.question_text || q.equation || "") + "</p>" +
+        optRows +
+        (q.solution_text ? "<div style='margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af'><b>Solution: </b>" + q.solution_text + "</div>" : "") +
+        "</div>";
+    }).join("");
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write("<!DOCTYPE html><html><head><title>" + student.name + " - Report</title><style>" +
+      "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
+      "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
+      "h2{color:#312e81;margin-top:28px}" +
+      ".stat{display:inline-block;margin:8px;padding:12px 20px;background:#f3f4f6;border-radius:10px;text-align:center;min-width:100px}" +
+      ".big{font-size:1.8em;font-weight:bold;color:#312e81}" +
+      ".lbl{font-size:11px;color:#6b7280;margin-top:2px}" +
+      "table{width:100%;border-collapse:collapse;margin-top:10px}" +
+      "th{background:#312e81;color:#fff;padding:8px 10px;font-size:12px;text-align:left}" +
+      "td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f3f4f6}" +
+      "@media print{.noprint{display:none}}" +
+      "</style></head><body>" +
+      "<h1>" + student.name + " - Exam Report</h1>" +
+      "<p style='color:#6b7280;font-size:13px'>Paper: " + (result.paper_id||paperFilter||"") + " &nbsp;|&nbsp; Test: " + (result.test_name||"Mock Test") + " &nbsp;|&nbsp; Date: " + new Date(result.created_at).toLocaleDateString("en-IN") + " &nbsp;|&nbsp; Generated: " + new Date().toLocaleString("en-IN") + "</p>" +
+      "<div style='margin:16px 0'>" +
+      "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / " + totalMarks + "</div></div>" +
+      "<div class='stat'><div class='big'>" + pct + "%</div><div class='lbl'>Percentage</div></div>" +
+      "<div class='stat'><div class='big'>" + correct + "</div><div class='lbl'>Correct</div></div>" +
+      "<div class='stat'><div class='big'>" + wrong + "</div><div class='lbl'>Wrong</div></div>" +
+      "<div class='stat'><div class='big'>" + unattempted + "</div><div class='lbl'>Unattempted</div></div>" +
+      (result.percentile != null ? "<div class='stat'><div class='big'>" + result.percentile + "%</div><div class='lbl'>Percentile</div></div>" : "") +
+      "<div class='stat'><div class='big' style='font-size:1.1em'>" + predictRankLocal(score) + "</div><div class='lbl'>Predicted Rank</div></div>" +
+      "</div>" +
+      "<h2>Subject-wise Performance</h2>" +
+      "<table><tr><th>Subject</th><th>Correct</th><th>Wrong</th><th>Unattempted</th><th>Score</th><th>Time</th></tr>" + subjSummary + "</table>" +
+      "<h2>All Questions with Solutions</h2>" +
+      "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green = correct &nbsp;|&nbsp; Red = wrong &nbsp;|&nbsp; Gray = unattempted</p>" +
+      qRows +
       "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "</body></html>");
     win.document.close();
@@ -2696,7 +2810,7 @@ function AdminScreen({ onSignOut }) {
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
                       {/* Table header */}
-                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px", gap:6, padding:"9px 12px", background:"rgba(99,102,241,0.2)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#94a3b8", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 110px", gap:6, padding:"9px 12px", background:"rgba(99,102,241,0.2)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#94a3b8", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
                         <div>#</div>
                         <div>Student</div>
                         <div>Attempts</div>
@@ -2704,49 +2818,112 @@ function AdminScreen({ onSignOut }) {
                         <div style={{ color:"#fbbf24" }}>Avg Score</div>
                         <div style={{ color:"#4ade80" }}>Best</div>
                         <div style={{ color:"#f87171" }}>Lowest</div>
-
+                        <div>Actions</div>
                       </div>
 
                       {analyticsData.byStudent.map((s, i) => {
                         const pct    = Math.round(s.avg / analyticsData.totalMarks * 100);
                         const pctCol = pct >= 50 ? "#4ade80" : "#f87171";
+                        const isSelected = selectedStudent?.email === s.email;
                         return (
-                          <div key={s.email} style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px", gap:6, padding:"10px 12px", background:i%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.018)", alignItems:"center", borderRadius: i===analyticsData.byStudent.length-1?"0 0 10px 10px":"0" }}>
-                            <div style={{ color:i<3?"#fbbf24":"#475569", fontWeight:700, fontSize:13 }}>{i+1}</div>
-                            <div>
-                              <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{s.name}</div>
-                              <div style={{ color:"#475569", fontSize:10 }}>{s.email}</div>
-                              <div style={{ marginTop:3, height:3, width:80, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
-                                <div style={{ height:"100%", borderRadius:99, background:pctCol, width:pct+"%" }} />
+                          <React.Fragment key={s.email}>
+                            <div
+                              onClick={() => setSelectedStudent(isSelected ? null : s)}
+                              style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 110px", gap:6, padding:"10px 12px", background:isSelected?"rgba(99,102,241,0.15)":i%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.018)", alignItems:"center", cursor:"pointer", transition:"background 0.15s" }}
+                              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background="rgba(99,102,241,0.08)"; }}
+                              onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background=i%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.018)"; }}
+                            >
+                              <div style={{ color:i<3?"#fbbf24":"#475569", fontWeight:700, fontSize:13 }}>{i+1}</div>
+                              <div>
+                                <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{s.name}</div>
+                                <div style={{ marginTop:3, height:3, width:80, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
+                                  <div style={{ height:"100%", borderRadius:99, background:pctCol, width:pct+"%" }} />
+                                </div>
+                              </div>
+                              <div style={{ color:"#94a3b8", fontSize:12, textAlign:"center" }}>{s.attempts}</div>
+                              <div style={{ fontWeight:700, color:pctCol, fontSize:13, textAlign:"center" }}>
+                                {s.latestScore}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span>
+                              </div>
+                              <div style={{ fontWeight:700, color:"#fbbf24", fontSize:13, textAlign:"center" }}>
+                                {s.avg}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span>
+                                <div style={{ fontSize:9, color:"#475569" }}>{pct}%</div>
+                              </div>
+                              <div style={{ color:"#4ade80", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.max}</div>
+                              <div style={{ color:"#f87171", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.min}</div>
+                              <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
+                                <button onClick={e => { e.stopPropagation(); setSelectedStudent(isSelected ? null : s); }}
+                                  style={{ ...abtn(isSelected?"primary":"ghost"), fontSize:10, padding:"4px 10px" }}>
+                                  {isSelected ? "Hide" : "Details"}
+                                </button>
                               </div>
                             </div>
-                            <div style={{ color:"#94a3b8", fontSize:12, textAlign:"center" }}>{s.attempts}</div>
-                            <div style={{ fontWeight:700, color:pctCol, fontSize:13, textAlign:"center" }}>
-                              {s.latestScore}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span>
-                            </div>
-                            <div style={{ fontWeight:700, color:"#fbbf24", fontSize:13, textAlign:"center" }}>
-                              {s.avg}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span>
-                              <div style={{ fontSize:9, color:"#475569" }}>{pct}%</div>
-                            </div>
-                            <div style={{ color:"#4ade80", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.max}</div>
-                            <div style={{ color:"#f87171", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.min}</div>
 
-                          </div>
+                            {isSelected && (
+                              <div style={{ background:"rgba(99,102,241,0.07)", borderTop:"1px solid rgba(99,102,241,0.2)", borderBottom:"1px solid rgba(99,102,241,0.2)", padding:"18px 20px" }}>
+                                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:8 }}>
+                                  <div>
+                                    <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"0.95rem" }}>{s.name}</div>
+                                    <div style={{ color:"#64748b", fontSize:12 }}>{s.attempts} attempt(s) &nbsp;|&nbsp; Best: {s.max}/{analyticsData.totalMarks} &nbsp;|&nbsp; Avg: {s.avg}/{analyticsData.totalMarks}</div>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      supabase.from("questions")
+                                        .select("id,number,subject,question_text,equation,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,diagram_data")
+                                        .eq("paper_id", paperFilter || "PAPER_01").order("number", { ascending:true })
+                                        .then(({ data }) => downloadStudentPDF(s, data || []));
+                                    }}
+                                    style={{ ...abtn("primary"), fontSize:12, padding:"7px 16px" }}>
+                                    Download PDF Report (Latest Attempt)
+                                  </button>
+                                </div>
+
+                                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                  <div style={{ color:"#64748b", fontSize:11, textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>All Attempts</div>
+                                  {s.rawResults.map((r, ri) => {
+                                    const rPct = Math.round((r.score||0) / analyticsData.totalMarks * 100);
+                                    const rCol = rPct >= 50 ? "#4ade80" : "#f87171";
+                                    const st   = r.subject_times || {};
+                                    return (
+                                      <div key={r.id || ri} style={{ background:"rgba(255,255,255,0.04)", borderRadius:10, padding:"12px 14px", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                                        <div style={{ width:44, height:44, borderRadius:"50%", background:rPct>=50?"rgba(34,197,94,0.15)":"rgba(239,68,68,0.15)", border:"2px solid "+(rPct>=50?"#22c55e":"#ef4444"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontWeight:700, color:rCol, fontSize:12 }}>{rPct}%</div>
+                                        <div style={{ flex:1 }}>
+                                          <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{r.test_name || "Mock Test"}</div>
+                                          <div style={{ color:"#475569", fontSize:11, marginTop:2 }}>{new Date(r.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}{r.percentile != null && <span style={{ color:"#818cf8", marginLeft:8 }}>{r.percentile}th %ile</span>}</div>
+                                          <div style={{ display:"flex", gap:10, fontSize:11, color:"#64748b", marginTop:3 }}>{["Physics","Chemistry","Botany","Zoology"].map(sub => <span key={sub}>{sub.slice(0,3)}: {Math.floor((st[sub]||0)/60)}m</span>)}</div>
+                                        </div>
+                                        <div style={{ textAlign:"right", flexShrink:0 }}>
+                                          <div style={{ fontWeight:700, color:rCol, fontSize:"1.1rem" }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span></div>
+                                          <div style={{ fontSize:11, marginTop:2 }}><span style={{ color:"#4ade80" }}>{r.correct}C </span><span style={{ color:"#f87171" }}>{r.wrong}W </span><span style={{ color:"#64748b" }}>{r.unattempted}S</span></div>
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            const sa = { ...s, rawResults: [r] };
+                                            supabase.from("questions")
+                                              .select("id,number,subject,question_text,equation,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,diagram_data")
+                                              .eq("paper_id", r.paper_id || paperFilter || "PAPER_01").order("number", { ascending:true })
+                                              .then(({ data }) => downloadStudentPDF(sa, data || []));
+                                          }}
+                                          style={{ ...abtn("ghost"), fontSize:11, padding:"6px 12px", flexShrink:0 }}>PDF
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
                         );
                       })}
 
-                      {/* Footer totals row */}
-                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px", gap:6, padding:"10px 12px", background:"rgba(99,102,241,0.12)", borderRadius:"0 0 10px 10px", fontSize:11, fontWeight:700, color:"#a5b4fc", alignItems:"center" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 110px", gap:6, padding:"10px 12px", background:"rgba(99,102,241,0.12)", borderRadius:"0 0 10px 10px", fontSize:11, fontWeight:700, color:"#a5b4fc", alignItems:"center" }}>
                         <div></div>
                         <div>CLASS AVERAGE</div>
                         <div style={{ textAlign:"center" }}>{analyticsData.total}</div>
-                        <div style={{ textAlign:"center" }}></div>
+                        <div style={{ textAlign:"center" }}>-</div>
                         <div style={{ textAlign:"center", color:"#fbbf24" }}>{analyticsData.classAvg}/{analyticsData.totalMarks}</div>
                         <div style={{ textAlign:"center", color:"#4ade80" }}>{analyticsData.classMax}</div>
                         <div style={{ textAlign:"center", color:"#f87171" }}>{analyticsData.classMin}</div>
-                        <div style={{ textAlign:"center" }}></div>
-                        <div style={{ textAlign:"center" }}></div>
-                        <div style={{ textAlign:"center" }}></div>
+                        <div></div>
                       </div>
                     </div>
                   )
