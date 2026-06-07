@@ -1141,9 +1141,9 @@ function AdminScreen({ onSignOut }) {
     if (!analyticsData?.byStudent?.length) return;
     const { byStudent, totalMarks, classAvg, classMax, classMin } = analyticsData;
     const lines = [
-      "Rank,Name,Email,Attempts,Latest Score,Avg Score,Max Score,Min Score,Total Marks,Avg%,Avg Correct,Avg Wrong,Avg Unattempted",
+      "Rank,Name,Attempts,Latest Score,Avg Score,Max Score,Min Score,Total Marks,Avg%,Avg Correct,Avg Wrong,Avg Unattempted",
       ...byStudent.map((s,i) => [
-        i+1, (s.name||"").replace(/,/g," "), s.email,
+        i+1, (s.name||"").replace(/,/g," "),
         s.attempts, s.latestScore, s.avg, s.max, s.min, totalMarks,
         Math.round(s.avg/totalMarks*100)+"%", s.avgC, s.avgW, s.avgU
       ].join(",")),
