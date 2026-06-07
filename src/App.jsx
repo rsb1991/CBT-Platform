@@ -1241,49 +1241,80 @@ function AdminScreen({ onSignOut }) {
   // Load question analytics
   const loadAnalytics = async () => {
     setAnalyticsLoading(true);
-    // Fetch all results with answers
-    const { data } = await supabase.from("test_results")
-      .select("answers, score, subject_times, paper_id")
-      .not("answers", "is", null)
+    setAnalyticsData(null);
+    const pid = paperFilter || "NEET_2025";
+
+    // Step 1: fetch ALL test results (with or without answers) for this paper
+    const { data: allResults, error: resErr } = await supabase
+      .from("test_results")
+      .select("id, answers, score, subject_times, paper_id, student_name, student_email")
+      .eq("paper_id", pid)
       .limit(500);
-    if (!data || !data.length) { setAnalyticsLoading(false); return; }
-    // Fetch questions
-    const { data: qs } = await supabase.from("questions")
-      .select("id, number, subject, question_text, paper_id")
-      .eq("paper_id", paperFilter || "NEET_2025");
-    if (!qs) { setAnalyticsLoading(false); return; }
-    // Compute per-question stats
-    const qStats = {};
-    qs.forEach(q => { qStats[q.id] = { q, attempts:0, correct:0, wrong:0, skip:0 }; });
-    data.forEach(r => {
-      const ans = r.answers || {};
-      Object.entries(ans).forEach(([qid, ua]) => {
-        if (!qStats[qid]) return;
-        qStats[qid].attempts++;
-        if (ua === undefined || ua === null) qStats[qid].skip++;
-        // We don't have correct answer here, so track attempt only
-      });
-      // Also count via questions array
-    });
-    // Better approach: re-fetch with correct answers
-    const { data: fullQs } = await supabase.from("questions")
+
+    // Also fetch results with no paper_id filter (in case paper_id not saved correctly)
+    const { data: allResultsAny } = await supabase
+      .from("test_results")
+      .select("id, answers, score, subject_times, paper_id, student_name, student_email")
+      .limit(500);
+
+    // Use paper-filtered if has data, else fall back to all results
+    const results = (allResults && allResults.length > 0) ? allResults : (allResultsAny || []);
+
+    if (!results.length) {
+      setAnalyticsData({ byQ: [], total: 0, noResults: true });
+      setAnalyticsLoading(false);
+      return;
+    }
+
+    // Step 2: fetch questions with correct answers
+    const { data: fullQs } = await supabase
+      .from("questions")
       .select("id, number, subject, question_text, correct, paper_id")
-      .eq("paper_id", paperFilter || "NEET_2025");
-    if (!fullQs) { setAnalyticsLoading(false); return; }
+      .eq("paper_id", pid)
+      .order("number", { ascending: true });
+
+    if (!fullQs || !fullQs.length) {
+      setAnalyticsData({ byQ: [], total: results.length, noQuestions: true });
+      setAnalyticsLoading(false);
+      return;
+    }
+
+    // Step 3: compute per-question stats across all results
     const stats = {};
-    fullQs.forEach(q => { stats[q.id] = { q, attempts:0, correct:0, wrong:0, skip:0 }; });
-    data.forEach(r => {
-      const ans = r.answers || {};
+    fullQs.forEach(q => { stats[q.id] = { q, attempts: 0, correct: 0, wrong: 0, skip: 0 }; });
+
+    let resultsWithAnswers = 0;
+    results.forEach(r => {
+      // answers can be stored as object or JSON string
+      let ans = r.answers;
+      if (typeof ans === "string") { try { ans = JSON.parse(ans); } catch (_) { ans = {}; } }
+      if (!ans || typeof ans !== "object") return;
+
+      const hasAnyAnswer = Object.keys(ans).length > 0;
+      if (hasAnyAnswer) resultsWithAnswers++;
+
       fullQs.forEach(q => {
-        if (ans[q.id] === undefined) { if(stats[q.id]) stats[q.id].skip++; }
-        else if (ans[q.id] === q.correct) { if(stats[q.id]) stats[q.id].correct++; }
-        else { if(stats[q.id]) stats[q.id].wrong++; }
-        if(stats[q.id]) stats[q.id].attempts++;
+        if (!stats[q.id]) return;
+        const ua = ans[q.id];
+        if (ua === undefined || ua === null) {
+          stats[q.id].skip++;
+        } else if (ua === q.correct) {
+          stats[q.id].correct++;
+        } else {
+          stats[q.id].wrong++;
+        }
+        stats[q.id].attempts++;
       });
     });
-    const arr = Object.values(stats).filter(s => s.attempts > 0);
-    arr.sort((a,b) => (a.correct/a.attempts) - (b.correct/b.attempts)); // hardest first
-    setAnalyticsData({ byQ: arr, total: data.length });
+
+    const arr = Object.values(stats);
+    arr.sort((a, b) => {
+      const accA = a.attempts > 0 ? a.correct / a.attempts : 1;
+      const accB = b.attempts > 0 ? b.correct / b.attempts : 1;
+      return accA - accB; // hardest first
+    });
+
+    setAnalyticsData({ byQ: arr, total: results.length, resultsWithAnswers });
     setAnalyticsLoading(false);
   };
 
@@ -2728,8 +2759,13 @@ function AdminScreen({ onSignOut }) {
             </div>
             {analyticsLoading ? (
               <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Calculating from {analyticsData?.total||0} attempts...</div>
-            ) : !analyticsData ? (
-              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>No data yet. Students need to attempt exams first.</div>
+            ) : !analyticsData || analyticsData.byQ.length === 0 ? (
+              <div style={{ display:"flex", flexDirection:"column", gap:8, textAlign:"center", color:"#475569", padding:40 }}>
+                <div>No analytics data found for paper <span style={{ color:"#fbbf24" }}>{paperFilter||"NEET_2025"}</span>.</div>
+                {analyticsData?.noResults && <div style={{ fontSize:12 }}>No test attempts found in the database yet.</div>}
+                {analyticsData?.noQuestions && <div style={{ fontSize:12 }}>No questions found for this paper ID. Check that questions are uploaded with the correct paper_id.</div>}
+                {analyticsData?.total > 0 && analyticsData?.byQ?.length === 0 && <div style={{ fontSize:12 }}>{analyticsData.total} result(s) found but answers were not recorded. Try submitting a test first.</div>}
+              </div>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                 {/* Header */}
@@ -2764,7 +2800,7 @@ function AdminScreen({ onSignOut }) {
                   );
                 })}
                 <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
-                  Based on {analyticsData.total} exam attempts. Sorted: lowest accuracy (hardest) first.
+                  Based on {analyticsData.total} exam attempt(s)  {analyticsData.resultsWithAnswers || 0} with answers recorded. Sorted: lowest accuracy (hardest) first.
                 </div>
               </div>
             )}
