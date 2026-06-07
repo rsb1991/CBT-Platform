@@ -441,6 +441,18 @@ const input = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1p
   fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
 
 // 
+// BRANDING HELPER  used by all screens
+// Returns a style object with background based on admin branding settings
+function brandingBg(branding = {}) {
+  const bgType = branding.bg_type || "gradient";
+  if (bgType === "solid" && branding.bg_solid_color)
+    return { background: branding.bg_solid_color };
+  if (bgType === "image" && branding.bg_image_data)
+    return { backgroundImage: "url(" + branding.bg_image_data + ")", backgroundSize: "cover", backgroundPosition: "center" };
+  return { background: "linear-gradient(135deg," + (branding.bg_gradient_from || "#0f0c29") + " 0%," + (branding.bg_gradient_to || "#302b63") + " 50%," + (branding.bg_gradient_from || "#24243e") + " 100%)" };
+}
+
+// 
 // LANDING SCREEN
 function LandingScreen({ onStudent, onAdmin, branding = {} }) {
   // Hide the pre-landing overlay (rendered in index.html for instant display)
@@ -498,7 +510,7 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
 
 
 // ADMIN AUTH SCREEN
-function AdminAuthScreen({ onSuccess, onBack }) {
+function AdminAuthScreen({ onSuccess, onBack, branding = {} }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [err,      setErr]      = useState("");
@@ -517,7 +529,7 @@ function AdminAuthScreen({ onSuccess, onBack }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(branding), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem" }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14, marginBottom: 24, fontFamily: "inherit" }}>
           &larr; Back
@@ -2856,7 +2868,7 @@ function AdminScreen({ onSignOut }) {
 
 // AUTH SCREEN
 // 
-function AuthScreen({ onAuth }) {
+function AuthScreen({ onAuth, branding = {} }) {
   const [mode, setMode] = useState("login"); // login | signup
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2883,7 +2895,7 @@ function AuthScreen({ onAuth }) {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+      minHeight: "100vh", ...brandingBg(branding),
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem"
     }}>
@@ -2971,7 +2983,7 @@ function AuthScreen({ onAuth }) {
 // 
 // DASHBOARD
 // 
-function Dashboard({ user, onStart, onSignOut, settings }) {
+function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [batchConfig, setBatchConfig] = useState(null);
@@ -3140,7 +3152,7 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
   const avgScore  = history.length ? Math.round(history.reduce((s, r) => s + r.score, 0) / history.length) : null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(branding), fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
         @font-face { font-family: 'Kruti Dev 010'; src: local('Kruti Dev 010'); }
@@ -3429,10 +3441,10 @@ function Dashboard({ user, onStart, onSignOut, settings }) {
 // 
 // INSTRUCTIONS
 // 
-function InstructionsScreen({ year, onBegin, onBack }) {
+function InstructionsScreen({ year, onBegin, onBack, branding = {} }) {
   const [agreed, setAgreed] = useState(false);
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", fontFamily: "'Crimson Pro', Georgia, serif", padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(branding), fontFamily: "'Crimson Pro', Georgia, serif", padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ maxWidth: 780, width: "100%" }}>
         <div style={{ ...card(), overflow: "hidden" }}>
           <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 30px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -3559,7 +3571,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked, visited }) {
 // 
 // EXAM SCREEN
 // 
-function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWindowStart, disableSubmit }) {
+function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWindowStart, disableSubmit, branding = {} }) {
   const restoreSession = () => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
@@ -3844,7 +3856,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWi
   const subjectColors = ["#6366f1","#f59e0b","#22c55e","#f43f5e"];
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", ...brandingBg(branding), fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0" }}>
       
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 12 }}>
         <div>
@@ -4058,7 +4070,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWi
 // 
 // RESULT SCREEN
 // 
-function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
+function ResultScreen({ questions, answers, year, user, meta, onDashboard, branding = {} }) {
   const [expandId,    setExpandId]    = useState(null);
   const [filterSub,   setFilterSub]   = useState("All");
   const [filterStatus,setFilterStatus]= useState("All");
@@ -4197,7 +4209,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard }) {
   const rank_band = pct >= 65 ? { label: "Excellent", color: "#4ade80" } : pct >= 50 ? { label: "Good", color: "#fbbf24" } : pct >= 35 ? { label: "Average", color: "#f59e0b" } : { label: "Needs Work", color: "#f87171" };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070d1a", fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0", paddingBottom: 60 }}>
+    <div style={{ minHeight: "100vh", ...brandingBg(branding), fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0", paddingBottom: 60 }}>
      
       <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -5012,14 +5024,14 @@ export default function App() {
       {screen === SCREEN.LANDING     && (
         <LandingScreen onStudent={() => setScreen(SCREEN.AUTH)} onAdmin={() => setScreen(SCREEN.ADMIN_AUTH)} branding={branding} />
       )}
-      {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} />}
-      {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} />}
+      {screen === SCREEN.AUTH         && <AuthScreen onAuth={handleAuth} branding={branding} />}
+      {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} branding={branding} />}
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
-      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} />}
-      {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} />}
-      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} examWindowStart={examWindowStart} disableSubmit={disableSubmit} />}
+      {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} branding={branding} />}
+      {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} branding={branding} />}
+      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} examWindowStart={examWindowStart} disableSubmit={disableSubmit} branding={branding} />}
       {screen === SCREEN.RESULT       && (
-        <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta}
+        <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta} branding={branding}
           onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }} />
       )}
     </>
