@@ -1086,10 +1086,7 @@ function AdminScreen({ onSignOut }) {
       const avg   = Math.round(s.scores.reduce((a,b)=>a+b,0) / s.scores.length);
       const max   = Math.max(...s.scores);
       const min   = Math.min(...s.scores);
-      const avgC  = Math.round(s.correct.reduce((a,b)=>a+b,0) / s.correct.length);
-      const avgW  = Math.round(s.wrong.reduce((a,b)=>a+b,0) / s.wrong.length);
-      const avgU  = Math.round(s.unattempted.reduce((a,b)=>a+b,0) / s.unattempted.length);
-      return { ...s, avg, max, min, avgC, avgW, avgU, totalMarks, latestScore: s.scores[0] };
+      return { ...s, avg, max, min, totalMarks, latestScore: s.scores[0] };
     });
     byStudent.sort((a,b) => b.avg - a.avg);
 
@@ -1141,11 +1138,11 @@ function AdminScreen({ onSignOut }) {
     if (!analyticsData?.byStudent?.length) return;
     const { byStudent, totalMarks, classAvg, classMax, classMin } = analyticsData;
     const lines = [
-      "Rank,Name,Attempts,Latest Score,Avg Score,Max Score,Min Score,Total Marks,Avg%,Avg Correct,Avg Wrong,Avg Unattempted",
+      "Rank,Name,Attempts,Latest Score,Avg Score,Max Score,Min Score,Total Marks,Avg%",
       ...byStudent.map((s,i) => [
         i+1, (s.name||"").replace(/,/g," "),
         s.attempts, s.latestScore, s.avg, s.max, s.min, totalMarks,
-        Math.round(s.avg/totalMarks*100)+"%", s.avgC, s.avgW, s.avgU
+        Math.round(s.avg/totalMarks*100)+"%"
       ].join(",")),
       "",
       "CLASS SUMMARY",
@@ -1181,9 +1178,7 @@ function AdminScreen({ onSignOut }) {
         "<td style='padding:7px 10px;text-align:center;color:#16a34a;font-weight:600'>" + s.max + "</td>" +
         "<td style='padding:7px 10px;text-align:center;color:#dc2626;font-weight:600'>" + s.min + "</td>" +
         "<td style='padding:7px 10px;text-align:center'><span style='background:" + (pct>=50?"#dcfce7":"#fee2e2") + ";color:" + col + ";padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700'>" + pct + "%</span></td>" +
-        "<td style='padding:7px 10px;text-align:center;color:#16a34a'>" + s.avgC + "</td>" +
-        "<td style='padding:7px 10px;text-align:center;color:#dc2626'>" + s.avgW + "</td>" +
-        "<td style='padding:7px 10px;text-align:center;color:#9ca3af'>" + s.avgU + "</td>" +
+
         "</tr>";
     }).join("");
     win.document.write("<!DOCTYPE html><html><head><title>" + pid + " - Student Analytics</title>" +
@@ -1205,7 +1200,7 @@ function AdminScreen({ onSignOut }) {
       "<div class='stat'><div class='big' style='color:#6366f1'>" + classAvg + "</div><div class='lbl'>Class Average</div></div>" +
       "<div class='stat'><div class='big' style='color:#dc2626'>" + classMin + "</div><div class='lbl'>Lowest Score</div></div>" +
       "</div>" +
-      "<table><thead><tr><th>#</th><th>Student</th><th>Attempts</th><th>Latest</th><th>Average</th><th>Best</th><th>Lowest</th><th>Avg%</th><th>Avg Correct</th><th>Avg Wrong</th><th>Avg Skip</th></tr></thead>" +
+      "<table><thead><tr><th>#</th><th>Student</th><th>Attempts</th><th>Latest</th><th>Average</th><th>Best</th><th>Lowest</th><th>Avg%</th></tr></thead>" +
       "<tbody>" + rows + "</tbody></table>" +
       "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "</body></html>");
@@ -2701,7 +2696,7 @@ function AdminScreen({ onSignOut }) {
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
                       {/* Table header */}
-                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 80px 80px 80px", gap:6, padding:"9px 12px", background:"rgba(99,102,241,0.2)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#94a3b8", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px", gap:6, padding:"9px 12px", background:"rgba(99,102,241,0.2)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#94a3b8", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
                         <div>#</div>
                         <div>Student</div>
                         <div>Attempts</div>
@@ -2709,16 +2704,14 @@ function AdminScreen({ onSignOut }) {
                         <div style={{ color:"#fbbf24" }}>Avg Score</div>
                         <div style={{ color:"#4ade80" }}>Best</div>
                         <div style={{ color:"#f87171" }}>Lowest</div>
-                        <div style={{ color:"#4ade80" }}>Avg Correct</div>
-                        <div style={{ color:"#f87171" }}>Avg Wrong</div>
-                        <div>Avg Skip</div>
+
                       </div>
 
                       {analyticsData.byStudent.map((s, i) => {
                         const pct    = Math.round(s.avg / analyticsData.totalMarks * 100);
                         const pctCol = pct >= 50 ? "#4ade80" : "#f87171";
                         return (
-                          <div key={s.email} style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 80px 80px 80px", gap:6, padding:"10px 12px", background:i%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.018)", alignItems:"center", borderRadius: i===analyticsData.byStudent.length-1?"0 0 10px 10px":"0" }}>
+                          <div key={s.email} style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px", gap:6, padding:"10px 12px", background:i%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.018)", alignItems:"center", borderRadius: i===analyticsData.byStudent.length-1?"0 0 10px 10px":"0" }}>
                             <div style={{ color:i<3?"#fbbf24":"#475569", fontWeight:700, fontSize:13 }}>{i+1}</div>
                             <div>
                               <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{s.name}</div>
@@ -2737,15 +2730,13 @@ function AdminScreen({ onSignOut }) {
                             </div>
                             <div style={{ color:"#4ade80", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.max}</div>
                             <div style={{ color:"#f87171", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.min}</div>
-                            <div style={{ color:"#4ade80", fontSize:12, textAlign:"center" }}>{s.avgC}</div>
-                            <div style={{ color:"#f87171", fontSize:12, textAlign:"center" }}>{s.avgW}</div>
-                            <div style={{ color:"#64748b", fontSize:12, textAlign:"center" }}>{s.avgU}</div>
+
                           </div>
                         );
                       })}
 
                       {/* Footer totals row */}
-                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 80px 80px 80px", gap:6, padding:"10px 12px", background:"rgba(99,102,241,0.12)", borderRadius:"0 0 10px 10px", fontSize:11, fontWeight:700, color:"#a5b4fc", alignItems:"center" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px", gap:6, padding:"10px 12px", background:"rgba(99,102,241,0.12)", borderRadius:"0 0 10px 10px", fontSize:11, fontWeight:700, color:"#a5b4fc", alignItems:"center" }}>
                         <div></div>
                         <div>CLASS AVERAGE</div>
                         <div style={{ textAlign:"center" }}>{analyticsData.total}</div>
