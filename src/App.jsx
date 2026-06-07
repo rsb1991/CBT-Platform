@@ -4070,7 +4070,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWi
 // 
 // RESULT SCREEN
 // 
-function ResultScreen({ questions, answers, year, user, meta, onDashboard, branding = {} }) {
+function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSignOut, branding = {} }) {
   const [expandId,    setExpandId]    = useState(null);
   const [filterSub,   setFilterSub]   = useState("All");
   const [filterStatus,setFilterStatus]= useState("All");
@@ -4211,14 +4211,24 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, brand
   return (
     <div style={{ minHeight: "100vh", ...brandingBg(branding), fontFamily: "'Crimson Pro', Georgia, serif", color: "#e2e8f0", paddingBottom: 60 }}>
      
-      <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "16px 28px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>{meta?.testName || ("Test Completed - NEET " + year)}</h2>
+          <h2 style={{ margin: "0 0 4px", fontSize: "1.5rem", color: "#e2e8f0" }}>{meta?.testName || "Test Completed"}</h2>
           <p style={{ color: "#818cf8", margin: 0, fontSize: 14 }}>Detailed Performance Analysis</p>
         </div>
-        <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
-          Download PDF Report
-        </button>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={downloadPDF} style={{ ...btn("ghost", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
+            Download PDF Report
+          </button>
+          <button onClick={onDashboard} style={{ ...btn("blue", { padding: "9px 18px" }), display: "flex", alignItems: "center", gap: 8 }}>
+            Dashboard
+          </button>
+          {onSignOut && (
+            <button onClick={onSignOut} style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", borderRadius: 10, padding: "9px 18px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}>
+              Sign Out
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "22px 16px" }}>
@@ -4779,7 +4789,7 @@ export default function App() {
     }
 
     const studentName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
-    if (meta && activeTest) meta.testName = activeTest.test_name;
+    if (meta) meta.testName = activeTest?.test_name || ("NEET " + year + " Mock Test");
     const payload = {
       year, score, correct, wrong, unattempted,
       total: questions.length, percentile,
@@ -5032,7 +5042,8 @@ export default function App() {
       {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} examWindowStart={examWindowStart} disableSubmit={disableSubmit} branding={branding} />}
       {screen === SCREEN.RESULT       && (
         <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta} branding={branding}
-          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }} />
+          onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }}
+          onSignOut={handleSignOut} />
       )}
     </>
   );
