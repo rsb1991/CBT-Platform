@@ -1244,83 +1244,185 @@ function AdminScreen({ onSignOut }) {
   useEffect(() => { if (tab === "batches") loadBatches(); }, [tab]);
 
   // Load question analytics
+  const [analyticsSubTab, setAnalyticsSubTab] = useState("students"); // students | questions
+
   const loadAnalytics = async () => {
     setAnalyticsLoading(true);
     setAnalyticsData(null);
     const pid = paperFilter || "NEET_2025";
 
-    // Step 1: fetch ALL test results (with or without answers) for this paper
-    const { data: allResults, error: resErr } = await supabase
+    // Fetch results for this paper, fall back to all if none found
+    const { data: allResults } = await supabase
       .from("test_results")
-      .select("id, answers, score, subject_times, paper_id, student_name, student_email")
+      .select("id, answers, score, correct, wrong, unattempted, total, subject_times, paper_id, student_name, student_email, test_name, created_at, percentile")
       .eq("paper_id", pid)
+      .order("score", { ascending: false })
       .limit(500);
-
-    // Also fetch results with no paper_id filter (in case paper_id not saved correctly)
     const { data: allResultsAny } = await supabase
       .from("test_results")
-      .select("id, answers, score, subject_times, paper_id, student_name, student_email")
+      .select("id, answers, score, correct, wrong, unattempted, total, subject_times, paper_id, student_name, student_email, test_name, created_at, percentile")
+      .order("score", { ascending: false })
       .limit(500);
-
-    // Use paper-filtered if has data, else fall back to all results
     const results = (allResults && allResults.length > 0) ? allResults : (allResultsAny || []);
 
     if (!results.length) {
-      setAnalyticsData({ byQ: [], total: 0, noResults: true });
+      setAnalyticsData({ byQ: [], byStudent: [], total: 0, noResults: true });
       setAnalyticsLoading(false);
       return;
     }
 
-    // Step 2: fetch questions with correct answers
+    // Per-student summary: group by email, compute avg/max/min/total
+    const studentMap = {};
+    results.forEach(r => {
+      const key = r.student_email || r.id;
+      if (!studentMap[key]) {
+        studentMap[key] = {
+          name:    r.student_name || r.student_email?.split("@")[0] || "Student",
+          email:   r.student_email || "",
+          scores:  [],
+          correct: [],
+          wrong:   [],
+          unattempted: [],
+          attempts: 0,
+        };
+      }
+      studentMap[key].scores.push(r.score || 0);
+      studentMap[key].correct.push(r.correct || 0);
+      studentMap[key].wrong.push(r.wrong || 0);
+      studentMap[key].unattempted.push(r.unattempted || 0);
+      studentMap[key].attempts++;
+    });
+
+    const totalMarks = (results[0]?.total || 180) * 4; // 180 questions * 4 marks
+    const byStudent = Object.values(studentMap).map(s => {
+      const avg   = Math.round(s.scores.reduce((a,b)=>a+b,0) / s.scores.length);
+      const max   = Math.max(...s.scores);
+      const min   = Math.min(...s.scores);
+      const avgC  = Math.round(s.correct.reduce((a,b)=>a+b,0) / s.correct.length);
+      const avgW  = Math.round(s.wrong.reduce((a,b)=>a+b,0) / s.wrong.length);
+      const avgU  = Math.round(s.unattempted.reduce((a,b)=>a+b,0) / s.unattempted.length);
+      return { ...s, avg, max, min, avgC, avgW, avgU, totalMarks, latestScore: s.scores[0] };
+    });
+    byStudent.sort((a,b) => b.avg - a.avg);
+
+    // Overall class stats
+    const allScores   = results.map(r => r.score || 0);
+    const classAvg    = Math.round(allScores.reduce((a,b)=>a+b,0) / allScores.length);
+    const classMax    = Math.max(...allScores);
+    const classMin    = Math.min(...allScores);
+
+    // Per-question stats
     const { data: fullQs } = await supabase
       .from("questions")
       .select("id, number, subject, question_text, correct, paper_id")
       .eq("paper_id", pid)
       .order("number", { ascending: true });
 
-    if (!fullQs || !fullQs.length) {
-      setAnalyticsData({ byQ: [], total: results.length, noQuestions: true });
-      setAnalyticsLoading(false);
-      return;
+    let byQ = [], resultsWithAnswers = 0;
+    if (fullQs && fullQs.length) {
+      const stats = {};
+      fullQs.forEach(q => { stats[q.id] = { q, attempts:0, correct:0, wrong:0, skip:0 }; });
+      results.forEach(r => {
+        let ans = r.answers;
+        if (typeof ans === "string") { try { ans = JSON.parse(ans); } catch (_) { ans = {}; } }
+        if (!ans || typeof ans !== "object") return;
+        if (Object.keys(ans).length > 0) resultsWithAnswers++;
+        fullQs.forEach(q => {
+          if (!stats[q.id]) return;
+          const ua = ans[q.id];
+          if (ua === undefined || ua === null) stats[q.id].skip++;
+          else if (ua === q.correct) stats[q.id].correct++;
+          else stats[q.id].wrong++;
+          stats[q.id].attempts++;
+        });
+      });
+      byQ = Object.values(stats);
+      byQ.sort((a,b) => {
+        const accA = a.attempts > 0 ? a.correct/a.attempts : 1;
+        const accB = b.attempts > 0 ? b.correct/b.attempts : 1;
+        return accA - accB;
+      });
     }
 
-    // Step 3: compute per-question stats across all results
-    const stats = {};
-    fullQs.forEach(q => { stats[q.id] = { q, attempts: 0, correct: 0, wrong: 0, skip: 0 }; });
-
-    let resultsWithAnswers = 0;
-    results.forEach(r => {
-      // answers can be stored as object or JSON string
-      let ans = r.answers;
-      if (typeof ans === "string") { try { ans = JSON.parse(ans); } catch (_) { ans = {}; } }
-      if (!ans || typeof ans !== "object") return;
-
-      const hasAnyAnswer = Object.keys(ans).length > 0;
-      if (hasAnyAnswer) resultsWithAnswers++;
-
-      fullQs.forEach(q => {
-        if (!stats[q.id]) return;
-        const ua = ans[q.id];
-        if (ua === undefined || ua === null) {
-          stats[q.id].skip++;
-        } else if (ua === q.correct) {
-          stats[q.id].correct++;
-        } else {
-          stats[q.id].wrong++;
-        }
-        stats[q.id].attempts++;
-      });
-    });
-
-    const arr = Object.values(stats);
-    arr.sort((a, b) => {
-      const accA = a.attempts > 0 ? a.correct / a.attempts : 1;
-      const accB = b.attempts > 0 ? b.correct / b.attempts : 1;
-      return accA - accB; // hardest first
-    });
-
-    setAnalyticsData({ byQ: arr, total: results.length, resultsWithAnswers });
+    setAnalyticsData({ byQ, byStudent, total: results.length, resultsWithAnswers, classAvg, classMax, classMin, totalMarks });
     setAnalyticsLoading(false);
+  };
+
+  // Download student analytics as CSV
+  const downloadAnalyticsCSV = () => {
+    if (!analyticsData?.byStudent?.length) return;
+    const { byStudent, totalMarks, classAvg, classMax, classMin } = analyticsData;
+    const lines = [
+      "Rank,Name,Email,Attempts,Latest Score,Avg Score,Max Score,Min Score,Total Marks,Avg%,Avg Correct,Avg Wrong,Avg Unattempted",
+      ...byStudent.map((s,i) => [
+        i+1, (s.name||"").replace(/,/g," "), s.email,
+        s.attempts, s.latestScore, s.avg, s.max, s.min, totalMarks,
+        Math.round(s.avg/totalMarks*100)+"%", s.avgC, s.avgW, s.avgU
+      ].join(",")),
+      "",
+      "CLASS SUMMARY",
+      "Total Students," + byStudent.length,
+      "Total Attempts," + analyticsData.total,
+      "Class Average," + classAvg + "/" + totalMarks,
+      "Highest Score," + classMax + "/" + totalMarks,
+      "Lowest Score," + classMin + "/" + totalMarks,
+    ];
+    const blob = new Blob([lines.join("
+")], { type:"text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = (paperFilter||"NEET_2025") + "_student_analytics.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Download student analytics as PDF
+  const downloadAnalyticsPDF = () => {
+    if (!analyticsData?.byStudent?.length) return;
+    const { byStudent, totalMarks, classAvg, classMax, classMin } = analyticsData;
+    const pid = paperFilter || "NEET_2025";
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const rows = byStudent.map((s,i) => {
+      const pct = Math.round(s.avg/totalMarks*100);
+      const col = pct>=50?"#16a34a":"#dc2626";
+      return "<tr style='border-bottom:1px solid #e5e7eb'>" +
+        "<td style='padding:7px 10px;font-weight:700;color:#6b7280'>" + (i+1) + "</td>" +
+        "<td style='padding:7px 10px'><div style='font-weight:600'>" + (s.name||"") + "</div><div style='font-size:11px;color:#9ca3af'>" + s.email + "</div></td>" +
+        "<td style='padding:7px 10px;text-align:center'>" + s.attempts + "</td>" +
+        "<td style='padding:7px 10px;text-align:center;font-weight:700;color:" + col + "'>" + s.latestScore + "<span style='color:#9ca3af;font-weight:400;font-size:10px'>/" + totalMarks + "</span></td>" +
+        "<td style='padding:7px 10px;text-align:center;font-weight:700;color:" + col + "'>" + s.avg + "<span style='color:#9ca3af;font-weight:400;font-size:10px'>/" + totalMarks + "</span></td>" +
+        "<td style='padding:7px 10px;text-align:center;color:#16a34a;font-weight:600'>" + s.max + "</td>" +
+        "<td style='padding:7px 10px;text-align:center;color:#dc2626;font-weight:600'>" + s.min + "</td>" +
+        "<td style='padding:7px 10px;text-align:center'><span style='background:" + (pct>=50?"#dcfce7":"#fee2e2") + ";color:" + col + ";padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700'>" + pct + "%</span></td>" +
+        "<td style='padding:7px 10px;text-align:center;color:#16a34a'>" + s.avgC + "</td>" +
+        "<td style='padding:7px 10px;text-align:center;color:#dc2626'>" + s.avgW + "</td>" +
+        "<td style='padding:7px 10px;text-align:center;color:#9ca3af'>" + s.avgU + "</td>" +
+        "</tr>";
+    }).join("");
+    win.document.write("<!DOCTYPE html><html><head><title>" + pid + " - Student Analytics</title>" +
+      "<style>body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:1100px;margin:0 auto}" +
+      "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
+      "table{width:100%;border-collapse:collapse;font-size:13px}" +
+      "th{background:#312e81;color:#fff;padding:9px 10px;text-align:left;font-size:12px}" +
+      ".stat{display:inline-block;margin:6px 10px 6px 0;padding:10px 18px;background:#f3f4f6;border-radius:8px;text-align:center}" +
+      ".big{font-size:1.5em;font-weight:bold;color:#312e81}" +
+      ".lbl{font-size:11px;color:#6b7280;margin-top:2px}" +
+      "@media print{.noprint{display:none}}</style></head><body>" +
+      "<h1>Student Analytics Report - " + pid + "</h1>" +
+      "<p style='color:#6b7280;font-size:13px'>Generated " + new Date().toLocaleString("en-IN") + " &nbsp;|&nbsp; " + analyticsData.total + " attempt(s) &nbsp;|&nbsp; " + byStudent.length + " student(s)</p>" +
+      "<div style='margin:16px 0 24px'>" +
+      "<div class='stat'><div class='big'>" + byStudent.length + "</div><div class='lbl'>Students</div></div>" +
+      "<div class='stat'><div class='big'>" + analyticsData.total + "</div><div class='lbl'>Total Attempts</div></div>" +
+      "<div class='stat'><div class='big'>" + totalMarks + "</div><div class='lbl'>Max Marks</div></div>" +
+      "<div class='stat'><div class='big' style='color:#16a34a'>" + classMax + "</div><div class='lbl'>Highest Score</div></div>" +
+      "<div class='stat'><div class='big' style='color:#6366f1'>" + classAvg + "</div><div class='lbl'>Class Average</div></div>" +
+      "<div class='stat'><div class='big' style='color:#dc2626'>" + classMin + "</div><div class='lbl'>Lowest Score</div></div>" +
+      "</div>" +
+      "<table><thead><tr><th>#</th><th>Student</th><th>Attempts</th><th>Latest</th><th>Average</th><th>Best</th><th>Lowest</th><th>Avg%</th><th>Avg Correct</th><th>Avg Wrong</th><th>Avg Skip</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody></table>" +
+      "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
+      "</body></html>");
+    win.document.close();
   };
 
   useEffect(() => { if (tab === "analytics") loadAnalytics(); }, [tab]);
@@ -2755,67 +2857,168 @@ function AdminScreen({ onSignOut }) {
         )}
         {tab === "analytics" && (
           <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+            {/* Header row: paper filter + load + downloads */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
               <div>
-                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Question Analytics</div>
-                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Sorted hardest first (lowest accuracy)</div>
+                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Analytics</div>
+                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Per-student results and question difficulty</div>
               </div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                <input
-                  value={paperFilter}
-                  onChange={e => setPaperFilter(e.target.value)}
-                  placeholder="Paper ID e.g. NEET_2025"
-                  style={{ ...ainput, width:200, fontSize:12 }}
-                />
+              <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="Paper ID e.g. NEET_2025" style={{ ...ainput, width:180, fontSize:12 }} />
                 <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("primary")}>{analyticsLoading ? "Loading..." : "Load"}</button>
+                {analyticsData?.byStudent?.length > 0 && (<>
+                  <button onClick={downloadAnalyticsCSV} style={{ ...abtn("success"), fontSize:12, padding:"8px 14px" }}>CSV</button>
+                  <button onClick={downloadAnalyticsPDF} style={{ ...abtn("ghost"), fontSize:12, padding:"8px 14px" }}>PDF Report</button>
+                </>)}
               </div>
             </div>
+
             {analyticsLoading ? (
-              <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Calculating from {analyticsData?.total||0} attempts...</div>
-            ) : !analyticsData || analyticsData.byQ.length === 0 ? (
-              <div style={{ display:"flex", flexDirection:"column", gap:8, textAlign:"center", color:"#475569", padding:40 }}>
-                <div>No analytics data found for paper <span style={{ color:"#fbbf24" }}>{paperFilter||"NEET_2025"}</span>.</div>
-                {analyticsData?.noResults && <div style={{ fontSize:12 }}>No test attempts found in the database yet.</div>}
-                {analyticsData?.noQuestions && <div style={{ fontSize:12 }}>No questions found for this paper ID. Check that questions are uploaded with the correct paper_id.</div>}
-                {analyticsData?.total > 0 && analyticsData?.byQ?.length === 0 && <div style={{ fontSize:12 }}>{analyticsData.total} result(s) found but answers were not recorded. Try submitting a test first.</div>}
-              </div>
+              <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Loading analytics...</div>
+            ) : !analyticsData ? (
+              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>Click Load to fetch analytics for a paper.</div>
+            ) : analyticsData.noResults ? (
+              <div style={{ textAlign:"center", color:"#475569", padding:40 }}>No test attempts found. Students need to submit a test first.</div>
             ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                {/* Header */}
-                <div style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5 }}>
-                  <div>Q#</div><div>Subject</div><div>Question</div>
-                  <div style={{ color:"#4ade80" }}>Correct</div>
-                  <div style={{ color:"#f87171" }}>Wrong</div>
-                  <div>Skip</div>
-                  <div style={{ color:"#fbbf24" }}>Accuracy</div>
+              <>
+                {/* Class summary cards */}
+                {analyticsData.byStudent?.length > 0 && (
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+                    {[
+                      ["Total Students",  analyticsData.byStudent.length, "#a5b4fc"],
+                      ["Total Attempts",  analyticsData.total,            "#818cf8"],
+                      ["Max Marks",       analyticsData.totalMarks,       "#e2e8f0"],
+                      ["Class Average",   analyticsData.classAvg + "/" + analyticsData.totalMarks, "#fbbf24"],
+                      ["Highest Score",   analyticsData.classMax + "/" + analyticsData.totalMarks, "#4ade80"],
+                      ["Lowest Score",    analyticsData.classMin + "/" + analyticsData.totalMarks, "#f87171"],
+                    ].map(([l,v,c]) => (
+                      <div key={l} style={{ ...acard, padding:"12px 14px", textAlign:"center" }}>
+                        <div style={{ color:c, fontWeight:700, fontSize:"1.1rem" }}>{v}</div>
+                        <div style={{ color:"#64748b", fontSize:11, marginTop:3 }}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Sub-tabs */}
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>setAnalyticsSubTab("students")} style={abtn(analyticsSubTab==="students"?"primary":"ghost")}>Student Results ({analyticsData.byStudent?.length||0})</button>
+                  <button onClick={()=>setAnalyticsSubTab("questions")} style={abtn(analyticsSubTab==="questions"?"primary":"ghost")}>Question Difficulty ({analyticsData.byQ?.length||0})</button>
                 </div>
-                {analyticsData.byQ.map((s, i) => {
-                  const acc = s.attempts > 0 ? Math.round(s.correct/s.attempts*100) : 0;
-                  const accColor = acc >= 70 ? "#4ade80" : acc >= 40 ? "#fbbf24" : "#f87171";
-                  return (
-                    <div key={s.q.id} style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
-                      <div style={{ color:"#818cf8", fontWeight:700, fontSize:12 }}>Q{s.q.number}</div>
-                      <div style={{ fontSize:10, color:"#94a3b8", background:"rgba(255,255,255,0.06)", borderRadius:4, padding:"2px 5px" }}>{s.q.subject.slice(0,4)}</div>
-                      <div style={{ fontSize:11, color:"#c7d2fe" }}>{(s.q.question_text||"").slice(0,55)}{(s.q.question_text||"").length>55?"...":""}</div>
-                      <div style={{ color:"#4ade80", fontWeight:600, fontSize:13 }}>{s.correct}</div>
-                      <div style={{ color:"#f87171", fontWeight:600, fontSize:13 }}>{s.wrong}</div>
-                      <div style={{ color:"#64748b", fontSize:13 }}>{s.skip}</div>
-                      <div>
-                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                          <div style={{ flex:1, height:5, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
-                            <div style={{ height:"100%", borderRadius:99, background:accColor, width:acc+"%" }} />
+
+                {/* STUDENT RESULTS TABLE */}
+                {analyticsSubTab === "students" && (
+                  analyticsData.byStudent?.length === 0 ? (
+                    <div style={{ textAlign:"center", color:"#475569", padding:30, fontSize:13 }}>No student data available.</div>
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                      {/* Table header */}
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 80px 80px 80px", gap:6, padding:"9px 12px", background:"rgba(99,102,241,0.2)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#94a3b8", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
+                        <div>#</div>
+                        <div>Student</div>
+                        <div>Attempts</div>
+                        <div style={{ color:"#e2e8f0" }}>Latest Score</div>
+                        <div style={{ color:"#fbbf24" }}>Avg Score</div>
+                        <div style={{ color:"#4ade80" }}>Best</div>
+                        <div style={{ color:"#f87171" }}>Lowest</div>
+                        <div style={{ color:"#4ade80" }}>Avg Correct</div>
+                        <div style={{ color:"#f87171" }}>Avg Wrong</div>
+                        <div>Avg Skip</div>
+                      </div>
+
+                      {analyticsData.byStudent.map((s, i) => {
+                        const pct    = Math.round(s.avg / analyticsData.totalMarks * 100);
+                        const pctCol = pct >= 50 ? "#4ade80" : "#f87171";
+                        return (
+                          <div key={s.email} style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 80px 80px 80px", gap:6, padding:"10px 12px", background:i%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.018)", alignItems:"center", borderRadius: i===analyticsData.byStudent.length-1?"0 0 10px 10px":"0" }}>
+                            <div style={{ color:i<3?"#fbbf24":"#475569", fontWeight:700, fontSize:13 }}>{i+1}</div>
+                            <div>
+                              <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{s.name}</div>
+                              <div style={{ color:"#475569", fontSize:10 }}>{s.email}</div>
+                              <div style={{ marginTop:3, height:3, width:80, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
+                                <div style={{ height:"100%", borderRadius:99, background:pctCol, width:pct+"%" }} />
+                              </div>
+                            </div>
+                            <div style={{ color:"#94a3b8", fontSize:12, textAlign:"center" }}>{s.attempts}</div>
+                            <div style={{ fontWeight:700, color:pctCol, fontSize:13, textAlign:"center" }}>
+                              {s.latestScore}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span>
+                            </div>
+                            <div style={{ fontWeight:700, color:"#fbbf24", fontSize:13, textAlign:"center" }}>
+                              {s.avg}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span>
+                              <div style={{ fontSize:9, color:"#475569" }}>{pct}%</div>
+                            </div>
+                            <div style={{ color:"#4ade80", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.max}</div>
+                            <div style={{ color:"#f87171", fontWeight:600, fontSize:12, textAlign:"center" }}>{s.min}</div>
+                            <div style={{ color:"#4ade80", fontSize:12, textAlign:"center" }}>{s.avgC}</div>
+                            <div style={{ color:"#f87171", fontSize:12, textAlign:"center" }}>{s.avgW}</div>
+                            <div style={{ color:"#64748b", fontSize:12, textAlign:"center" }}>{s.avgU}</div>
                           </div>
-                          <span style={{ color:accColor, fontWeight:700, fontSize:11, minWidth:32 }}>{acc}%</span>
-                        </div>
-                        <div style={{ fontSize:9, color:"#475569", marginTop:1 }}>{s.attempts} attempts</div>
+                        );
+                      })}
+
+                      {/* Footer totals row */}
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 1fr 80px 100px 100px 80px 80px 80px 80px 80px", gap:6, padding:"10px 12px", background:"rgba(99,102,241,0.12)", borderRadius:"0 0 10px 10px", fontSize:11, fontWeight:700, color:"#a5b4fc", alignItems:"center" }}>
+                        <div></div>
+                        <div>CLASS AVERAGE</div>
+                        <div style={{ textAlign:"center" }}>{analyticsData.total}</div>
+                        <div style={{ textAlign:"center" }}></div>
+                        <div style={{ textAlign:"center", color:"#fbbf24" }}>{analyticsData.classAvg}/{analyticsData.totalMarks}</div>
+                        <div style={{ textAlign:"center", color:"#4ade80" }}>{analyticsData.classMax}</div>
+                        <div style={{ textAlign:"center", color:"#f87171" }}>{analyticsData.classMin}</div>
+                        <div style={{ textAlign:"center" }}></div>
+                        <div style={{ textAlign:"center" }}></div>
+                        <div style={{ textAlign:"center" }}></div>
                       </div>
                     </div>
-                  );
-                })}
-                <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
-                  Based on {analyticsData.total} exam attempt(s)  {analyticsData.resultsWithAnswers || 0} with answers recorded. Sorted: lowest accuracy (hardest) first.
-                </div>
-              </div>
+                  )
+                )}
+
+                {/* QUESTION DIFFICULTY TABLE */}
+                {analyticsSubTab === "questions" && (
+                  analyticsData.byQ?.length === 0 ? (
+                    <div style={{ textAlign:"center", color:"#475569", padding:30, fontSize:13 }}>
+                      {analyticsData.noQuestions ? "No questions found for this paper ID." : "No answer data available for question analytics."}
+                    </div>
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"8px 12px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5 }}>
+                        <div>Q#</div><div>Subject</div><div>Question</div>
+                        <div style={{ color:"#4ade80" }}>Correct</div>
+                        <div style={{ color:"#f87171" }}>Wrong</div>
+                        <div>Skip</div>
+                        <div style={{ color:"#fbbf24" }}>Accuracy</div>
+                      </div>
+                      {analyticsData.byQ.map((s, i) => {
+                        const acc = s.attempts > 0 ? Math.round(s.correct/s.attempts*100) : 0;
+                        const accColor = acc >= 70 ? "#4ade80" : acc >= 40 ? "#fbbf24" : "#f87171";
+                        return (
+                          <div key={s.q.id} style={{ display:"grid", gridTemplateColumns:"40px 60px 1fr 70px 70px 70px 90px", gap:8, padding:"9px 12px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
+                            <div style={{ color:"#818cf8", fontWeight:700, fontSize:12 }}>Q{s.q.number}</div>
+                            <div style={{ fontSize:10, color:"#94a3b8", background:"rgba(255,255,255,0.06)", borderRadius:4, padding:"2px 5px" }}>{s.q.subject.slice(0,4)}</div>
+                            <div style={{ fontSize:11, color:"#c7d2fe" }}>{(s.q.question_text||"").slice(0,55)}{(s.q.question_text||"").length>55?"...":""}</div>
+                            <div style={{ color:"#4ade80", fontWeight:600, fontSize:13 }}>{s.correct}</div>
+                            <div style={{ color:"#f87171", fontWeight:600, fontSize:13 }}>{s.wrong}</div>
+                            <div style={{ color:"#64748b", fontSize:13 }}>{s.skip}</div>
+                            <div>
+                              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                                <div style={{ flex:1, height:5, background:"rgba(0,0,0,0.3)", borderRadius:99 }}>
+                                  <div style={{ height:"100%", borderRadius:99, background:accColor, width:acc+"%" }} />
+                                </div>
+                                <span style={{ color:accColor, fontWeight:700, fontSize:11, minWidth:32 }}>{acc}%</span>
+                              </div>
+                              <div style={{ fontSize:9, color:"#475569", marginTop:1 }}>{s.attempts} attempts</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div style={{ padding:"8px 12px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
+                        Based on {analyticsData.total} attempt(s)  {analyticsData.resultsWithAnswers||0} with answers. Sorted: hardest first.
+                      </div>
+                    </div>
+                  )
+                )}
+              </>
             )}
           </div>
         )}
