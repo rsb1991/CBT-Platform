@@ -384,14 +384,19 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
 
 // Returns { error } or null
 async function sbSaveResult(userId, payload) {
-  if (!isSupabaseConfigured()) return null;
+  if (!isSupabaseConfigured()) return { error: "Supabase not configured" };
   try {
     const { error } = await supabase
       .from("test_results")
       .insert([{ user_id: userId, ...payload, created_at: new Date().toISOString() }]);
-    if (error) console.warn("Could not save result:", friendlyError(error, "test_results"));
+    if (error) {
+      console.warn("Could not save result:", error);
+      return { error: error.message };
+    }
+    return { error: null };
   } catch (e) {
     console.warn("Could not save result:", e.message);
+    return { error: e.message };
   }
 }
 
@@ -2750,12 +2755,20 @@ function AdminScreen({ onSignOut }) {
         )}
         {tab === "analytics" && (
           <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
               <div>
                 <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>Question Analytics</div>
-                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Paper: <span style={{ color:"#fbbf24" }}>{paperFilter||"NEET_2025"}</span>  sorted hardest first</div>
+                <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Sorted hardest first (lowest accuracy)</div>
               </div>
-              <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("ghost")}>{analyticsLoading ? "Loading..." : "Refresh"}</button>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <input
+                  value={paperFilter}
+                  onChange={e => setPaperFilter(e.target.value)}
+                  placeholder="Paper ID e.g. NEET_2025"
+                  style={{ ...ainput, width:200, fontSize:12 }}
+                />
+                <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("primary")}>{analyticsLoading ? "Loading..." : "Load"}</button>
+              </div>
             </div>
             {analyticsLoading ? (
               <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Calculating from {analyticsData?.total||0} attempts...</div>
@@ -4269,6 +4282,11 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "22px 16px" }}>
         
+        {meta?.saveError && (
+          <div style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, padding:"10px 16px", marginBottom:16, color:"#f87171", fontSize:13 }}>
+            Result could not be saved to database: {meta.saveError}. Your score is shown below but will not appear in admin reports.
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
           {[["summary","Summary"],["analytics","Analytics"],["solutions","Solutions"],["bookmarks","Bookmarks (" + bookmarked.size + ")"]].map(([t,l]) => (
             <button key={t} onClick={() => setActiveTab(t)} style={btn(activeTab===t?"primary":"ghost", { padding: "8px 18px", fontSize: 13 })}>{l}</button>
@@ -4853,9 +4871,36 @@ export default function App() {
       } catch (_) {}
     }
 
-    // Save to Supabase
+    // Save to Supabase  strip any fields not in test_results schema
     if (isSupabaseConfigured() && user) {
-      await sbSaveResult(user.id, payload);
+      // Only send columns that exist in the test_results table
+      const safePayload = {
+        year:              payload.year,
+        score:             payload.score,
+        correct:           payload.correct,
+        wrong:             payload.wrong,
+        unattempted:       payload.unattempted,
+        total:             payload.total,
+        percentile:        payload.percentile,
+        answers:           payload.answers,
+        student_name:      payload.student_name,
+        student_email:     payload.student_email,
+        paper_id:          payload.paper_id,
+        test_name:         payload.test_name || (activeTest?.test_name || "NEET Mock Test"),
+        subject_times:     payload.subject_times,
+        time_per_question: payload.time_per_question,
+        bookmarks:         payload.bookmarks,
+        ...(activeTest ? {
+          batch_test_id: activeTest.batch_test_id,
+          batch_id:      activeTest.batch_id,
+        } : {}),
+      };
+      const { error: saveErr } = await sbSaveResult(user.id, safePayload);
+      if (saveErr) {
+        console.error("Result save error:", saveErr);
+        // Store error in meta so ResultScreen can show a warning
+        if (meta) meta.saveError = saveErr;
+      }
     }
 
     setScreen(SCREEN.RESULT);
