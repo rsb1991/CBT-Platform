@@ -1205,7 +1205,7 @@ function AdminScreen({ onSignOut }) {
   };
 
   // Generate per-student PDF report (same format as student sees after exam)
-  const downloadStudentPDF = (student, questions, existingWin = null) => {
+  const downloadStudentPDF = (student, questions, existingWin = null, classData = null) => {
     if (!student || !questions?.length) {
       if (existingWin) existingWin.document.write("<html><body><p>No questions found for this paper.</p></body></html>");
       return;
@@ -1241,16 +1241,64 @@ function AdminScreen({ onSignOut }) {
       return "Above 8,00,000";
     };
 
-    const subjSummary = SUBJECTS.map(s => {
+    // Per-subject stats for this student
+    const subjData = SUBJECTS.map(s => {
       const sq = questions.filter(q => q.subject === s);
       const c  = sq.filter(q => answers[q.id] === q.correct).length;
       const w  = sq.filter(q => answers[q.id] !== undefined && answers[q.id] !== q.correct).length;
       const u  = sq.filter(q => answers[q.id] === undefined).length;
       const sc = c * 4 + w * (-1);
       const t  = subTimes[s] || 0;
-      return "<tr><td><b>" + s + "</b></td><td style='color:green'>" + c + "</td><td style='color:red'>" + w +
-        "</td><td style='color:gray'>" + u + "</td><td><b>" + sc + "</b></td>" +
-        "<td>" + Math.floor(t/60) + "m " + (t%60) + "s</td></tr>";
+      return { s, c, w, u, sc, t };
+    });
+
+    // Class averages per subject (from classData passed in)
+    // classData.byStudent has rawResults per student
+    const classSubjAvg = {};
+    const classSubjMax = {};
+    if (classData?.byStudent?.length > 1) {
+      SUBJECTS.forEach(sub => {
+        const subScores = classData.byStudent
+          .filter(st => st.email !== student.email) // exclude this student
+          .map(st => {
+            const r0 = st.rawResults[0];
+            if (!r0) return null;
+            let a = r0.answers;
+            if (typeof a === "string") { try { a = JSON.parse(a); } catch(_){ a={}; } }
+            a = a || {};
+            const sq = questions.filter(q => q.subject === sub);
+            const c  = sq.filter(q => a[q.id] === q.correct).length;
+            const w  = sq.filter(q => a[q.id] !== undefined && a[q.id] !== q.correct).length;
+            return c * 4 + w * (-1);
+          }).filter(v => v !== null);
+        if (subScores.length) {
+          classSubjAvg[sub] = Math.round(subScores.reduce((a,b)=>a+b,0) / subScores.length);
+          classSubjMax[sub] = Math.max(...subScores);
+        }
+      });
+    }
+
+    // Class total avg/max excluding this student
+    const classAllScores = classData?.byStudent
+      ?.filter(st => st.email !== student.email)
+      ?.map(st => st.avg) || [];
+    const classAvgTotal = classAllScores.length ? Math.round(classAllScores.reduce((a,b)=>a+b,0)/classAllScores.length) : null;
+    const classMaxTotal = classAllScores.length ? Math.max(...classAllScores) : null;
+    const classCount    = classAllScores.length;
+
+    const subjSummary = subjData.map(({ s, c, w, u, sc, t }) => {
+      const avg = classSubjAvg[s] != null ? classSubjAvg[s] : "-";
+      const max = classSubjMax[s] != null ? classSubjMax[s] : "-";
+      return "<tr>" +
+        "<td><b>" + s + "</b></td>" +
+        "<td style='color:green'>" + c + "</td>" +
+        "<td style='color:red'>" + w + "</td>" +
+        "<td style='color:gray'>" + u + "</td>" +
+        "<td><b>" + sc + "</b></td>" +
+        "<td>" + Math.floor(t/60) + "m " + (t%60) + "s</td>" +
+        "<td style='color:#6366f1;font-weight:600'>" + avg + "</td>" +
+        "<td style='color:#0891b2;font-weight:600'>" + max + "</td>" +
+        "</tr>";
     }).join("");
 
     const qRows = questions.map(q => {
@@ -1312,7 +1360,15 @@ function AdminScreen({ onSignOut }) {
       "<div class='stat'><div class='big' style='font-size:1.1em'>" + predictRankLocal(score) + "</div><div class='lbl'>Predicted Rank</div></div>" +
       "</div>" +
       "<h2>Subject-wise Performance</h2>" +
-      "<table><tr><th>Subject</th><th>Correct</th><th>Wrong</th><th>Unattempted</th><th>Score</th><th>Time</th></tr>" + subjSummary + "</table>" +
+      "<table><tr><th>Subject</th><th>Correct</th><th>Wrong</th><th>Unattempted</th><th>Score</th><th>Time</th><th style='background:#4338ca'>Class Avg</th><th style='background:#0e7490'>Class Max</th></tr>" + subjSummary + "</table>" +
+      (classCount > 0 ?
+      "<h2>Class Comparison</h2>" +
+      "<div style='display:flex;gap:12px;flex-wrap:wrap;margin:12px 0'>" +
+      "<div style='padding:12px 20px;background:#f3f4f6;border-radius:8px;text-align:center;min-width:110px'><div style='font-size:1.5em;font-weight:bold;color:#312e81'>" + score + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>This Student</div></div>" +
+      "<div style='padding:12px 20px;background:#eff6ff;border-radius:8px;text-align:center;min-width:110px;border:1px solid #bfdbfe'><div style='font-size:1.5em;font-weight:bold;color:#1d4ed8'>" + (classAvgTotal != null ? classAvgTotal : "-") + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>Class Avg (" + classCount + " students)</div></div>" +
+      "<div style='padding:12px 20px;background:#ecfdf5;border-radius:8px;text-align:center;min-width:110px;border:1px solid #a7f3d0'><div style='font-size:1.5em;font-weight:bold;color:#059669'>" + (classMaxTotal != null ? classMaxTotal : "-") + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>Class Highest</div></div>" +
+      "</div>"
+      : "") +
       "<h2>All Questions with Solutions</h2>" +
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green = correct &nbsp;|&nbsp; Red = wrong &nbsp;|&nbsp; Gray = unattempted</p>" +
       qRows +
@@ -2880,7 +2936,7 @@ function AdminScreen({ onSignOut }) {
                                         win.document.write("<html><body style='font-family:Arial;padding:40px;color:red'><h2>Error loading questions</h2><p>" + (error?.message || "No questions found for paper: " + (paperFilter||"PAPER_01")) + "</p></body></html>");
                                         return;
                                       }
-                                      downloadStudentPDF(s, data, win);
+                                      downloadStudentPDF(s, data, win, analyticsData);
                                     }}
                                     style={{ ...abtn("primary"), fontSize:12, padding:"7px 16px" }}>
                                     Download PDF Report (Latest Attempt)
@@ -2918,7 +2974,7 @@ function AdminScreen({ onSignOut }) {
                                               win.document.write("<html><body style='font-family:Arial;padding:40px;color:red'><h2>Error</h2><p>" + (error?.message || "No questions found.") + "</p></body></html>");
                                               return;
                                             }
-                                            downloadStudentPDF(sa, data, win);
+                                            downloadStudentPDF(sa, data, win, analyticsData);
                                           }}
                                           style={{ ...abtn("ghost"), fontSize:11, padding:"6px 12px", flexShrink:0 }}>PDF
                                         </button>
