@@ -1040,7 +1040,7 @@ function AdminScreen({ onSignOut }) {
     setAnalyticsData(null);
     const pid = paperFilter || "PAPER_01";
 
-    // Fetch results ONLY for the exact paper ID entered — no fallback
+    // Fetch results ONLY for the exact paper ID entered  no fallback
     const { data: results } = await supabase
       .from("test_results")
       .select("id, answers, score, correct, wrong, unattempted, total, subject_times, paper_id, student_name, student_email, test_name, created_at, percentile")
@@ -3365,6 +3365,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
       batch_test_id:     nextTest.id,
       batch_id:          nextTest.batch_id,
       test_name:         nextTest.name,
+      paper_id:          nextTest.paper_id || eff?.paper_id || "PAPER_01",
       exam_window_start: nextTest.exam_window_start || null,
       exam_window_end:   nextTest.exam_window_end   || null,
       disable_submit:    nextTest.disable_submit === "true",
@@ -4983,7 +4984,7 @@ export default function App() {
         answers: ans,
         meta: meta || {},
         questionIds: questions.map(q => q.id),
-        paper_id: questions[0]?.paper_id || "PAPER_01",
+        paper_id: activeTest?.paper_id || questions[0]?.paper_id || "PAPER_01",
         savedAt: Date.now(),
       }));
     } catch (_) {}
@@ -5025,7 +5026,7 @@ export default function App() {
       answers:           ans,
       student_name:      studentName,
       student_email:     user?.email || "",
-      paper_id:          questions[0]?.paper_id || "PAPER_01",
+      paper_id:          activeTest?.paper_id || questions[0]?.paper_id || "PAPER_01",
       ...(activeTest ? {
         batch_test_id: activeTest.batch_test_id,
         batch_id:      activeTest.batch_id,
