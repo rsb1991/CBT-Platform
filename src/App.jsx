@@ -1211,11 +1211,17 @@ function AdminScreen({ onSignOut }) {
   };
 
   // Generate per-student PDF report (same format as student sees after exam)
-  const downloadStudentPDF = (student, questions, reuseWindow = false) => {
-    if (!student || !questions?.length) return;
+  const downloadStudentPDF = (student, questions, existingWin = null) => {
+    if (!student || !questions?.length) {
+      if (existingWin) existingWin.document.write("<html><body><p>No questions found for this paper.</p></body></html>");
+      return;
+    }
     // Use most recent attempt
     const result = student.rawResults[0];
-    if (!result) return;
+    if (!result) {
+      if (existingWin) existingWin.document.write("<html><body><p>No result data found.</p></body></html>");
+      return;
+    }
     let answers = result.answers;
     if (typeof answers === "string") { try { answers = JSON.parse(answers); } catch (_) { answers = {}; } }
     answers = answers || {};
@@ -1286,8 +1292,8 @@ function AdminScreen({ onSignOut }) {
         "</div>";
     }).join("");
 
-    const win = window.open("", "_blank");
-    if (!win) return;
+    const win = existingWin || window.open("", "_blank");
+    if (!win) { alert("Please allow popups for this site to view PDF reports."); return; }
     win.document.write("<!DOCTYPE html><html><head><title>" + student.name + " - Report</title><style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
@@ -2868,13 +2874,16 @@ function AdminScreen({ onSignOut }) {
                                   <button
                                     onClick={async () => {
                                       const win = window.open("", "_blank");
-                                      if (!win) { alert("Please allow popups for this site to download PDF reports."); return; }
-                                      win.document.write("<html><body style='font-family:Arial;padding:40px;color:#333'><h2>Loading report...</h2><p>Please wait while the report is generated.</p></body></html>");
-                                      const { data } = await supabase.from("questions")
+                                      if (!win) { alert("Please allow popups for this site to view PDF reports.\n\nTo fix: click the popup blocked icon in your browser address bar and allow popups from this site."); return; }
+                                      win.document.write("<html><body style='font-family:Arial,sans-serif;padding:40px;background:#f8fafc;color:#333;text-align:center;margin-top:80px'><div style='font-size:24px;margin-bottom:12px'>&#9203;</div><h2 style='color:#312e81'>Generating Report...</h2><p style='color:#6b7280'>Please wait while questions are loaded.</p></body></html>");
+                                      const { data, error } = await supabase.from("questions")
                                         .select("id,number,subject,question_text,equation,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,diagram_data")
                                         .eq("paper_id", paperFilter || "PAPER_01").order("number", { ascending:true });
-                                      win.close();
-                                      downloadStudentPDF(s, data || [], true);
+                                      if (error || !data?.length) {
+                                        win.document.write("<html><body style='font-family:Arial;padding:40px;color:red'><h2>Error loading questions</h2><p>" + (error?.message || "No questions found for paper: " + (paperFilter||"PAPER_01")) + "</p></body></html>");
+                                        return;
+                                      }
+                                      downloadStudentPDF(s, data, win);
                                     }}
                                     style={{ ...abtn("primary"), fontSize:12, padding:"7px 16px" }}>
                                     Download PDF Report (Latest Attempt)
@@ -2903,13 +2912,16 @@ function AdminScreen({ onSignOut }) {
                                           onClick={async () => {
                                             const sa = { ...s, rawResults: [r] };
                                             const win = window.open("", "_blank");
-                                            if (!win) { alert("Please allow popups for this site to download PDF reports."); return; }
-                                            win.document.write("<html><body style='font-family:Arial;padding:40px;color:#333'><h2>Loading...</h2></body></html>");
-                                            const { data } = await supabase.from("questions")
+                                            if (!win) { alert("Please allow popups for this site to view PDF reports.\n\nTo fix: click the popup blocked icon in your browser address bar and allow popups from this site."); return; }
+                                            win.document.write("<html><body style='font-family:Arial,sans-serif;padding:40px;background:#f8fafc;color:#333;text-align:center;margin-top:80px'><div style='font-size:24px;margin-bottom:12px'>&#9203;</div><h2 style='color:#312e81'>Generating Report...</h2><p style='color:#6b7280'>Please wait...</p></body></html>");
+                                            const { data, error } = await supabase.from("questions")
                                               .select("id,number,subject,question_text,equation,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,diagram_data")
                                               .eq("paper_id", r.paper_id || paperFilter || "PAPER_01").order("number", { ascending:true });
-                                            win.close();
-                                            downloadStudentPDF(sa, data || [], true);
+                                            if (error || !data?.length) {
+                                              win.document.write("<html><body style='font-family:Arial;padding:40px;color:red'><h2>Error</h2><p>" + (error?.message || "No questions found.") + "</p></body></html>");
+                                              return;
+                                            }
+                                            downloadStudentPDF(sa, data, win);
                                           }}
                                           style={{ ...abtn("ghost"), fontSize:11, padding:"6px 12px", flexShrink:0 }}>PDF
                                         </button>
