@@ -12,7 +12,7 @@
 //   $$...$$ centred block math
 //   Or embed $...$ directly inside question_text anywhere
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 // 
 // KaTeX loader  CDN, cached after first load
