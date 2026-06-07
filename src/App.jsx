@@ -1382,9 +1382,7 @@ function AdminScreen({ onSignOut }) {
     setBrandingLoading(false);
 
     if (errors.length) {
-      setBrandingMsg({ type: "error", text: "Save failed:
-" + errors.slice(0, 5).join("
-") });
+      setBrandingMsg({ type: "error", text: "Save failed: " + errors.slice(0, 5).join(", ") });
       return;
     }
 
