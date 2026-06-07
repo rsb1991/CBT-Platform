@@ -1034,6 +1034,8 @@ function AdminScreen({ onSignOut }) {
   // Load question analytics
   const [analyticsSubTab,    setAnalyticsSubTab]    = useState("students"); // students | questions
   const [selectedStudent,    setSelectedStudent]    = useState(null); // student object for detail view
+  const [availablePapers,    setAvailablePapers]    = useState([]); // all distinct paper IDs in test_results
+  const [showPaperDrop,      setShowPaperDrop]      = useState(false); // dropdown visibility
 
   const loadAnalytics = async () => {
     setAnalyticsLoading(true);
@@ -1364,7 +1366,7 @@ function AdminScreen({ onSignOut }) {
       (classCount > 0 ?
       "<h2>Class Comparison</h2>" +
       "<div style='display:flex;gap:12px;flex-wrap:wrap;margin:12px 0'>" +
-      "<div style='padding:12px 20px;background:#f3f4f6;border-radius:8px;text-align:center;min-width:110px'><div style='font-size:1.5em;font-weight:bold;color:#312e81'>" + score + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>You</div></div>" +
+      "<div style='padding:12px 20px;background:#f3f4f6;border-radius:8px;text-align:center;min-width:110px'><div style='font-size:1.5em;font-weight:bold;color:#312e81'>" + score + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>This Student</div></div>" +
       "<div style='padding:12px 20px;background:#eff6ff;border-radius:8px;text-align:center;min-width:110px;border:1px solid #bfdbfe'><div style='font-size:1.5em;font-weight:bold;color:#1d4ed8'>" + (classAvgTotal != null ? classAvgTotal : "-") + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>Class Avg (" + classCount + " students)</div></div>" +
       "<div style='padding:12px 20px;background:#ecfdf5;border-radius:8px;text-align:center;min-width:110px;border:1px solid #a7f3d0'><div style='font-size:1.5em;font-weight:bold;color:#059669'>" + (classMaxTotal != null ? classMaxTotal : "-") + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>Class Highest</div></div>" +
       "</div>"
@@ -1377,7 +1379,20 @@ function AdminScreen({ onSignOut }) {
     win.document.close();
   };
 
-  useEffect(() => { if (tab === "analytics") loadAnalytics(); }, [tab]);
+  useEffect(() => {
+    if (tab === "analytics") {
+      loadAnalytics();
+      // Load all distinct paper IDs for the dropdown
+      supabase.from("test_results")
+        .select("paper_id")
+        .then(({ data }) => {
+          if (data) {
+            const ids = [...new Set(data.map(r => r.paper_id).filter(Boolean))].sort();
+            setAvailablePapers(ids);
+          }
+        });
+    }
+  }, [tab]);
 
   // Parse student CSV: email, password, full_name
   // Parse student CSV: email, password, full_name
@@ -2817,8 +2832,38 @@ function AdminScreen({ onSignOut }) {
                 <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Per-student results and question difficulty</div>
               </div>
               <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="e.g. PAPER_01" style={{ ...ainput, width:180, fontSize:12 }} />
-                <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("primary")}>{analyticsLoading ? "Loading..." : "Load"}</button>
+                <div style={{ position:"relative" }}>
+                  <input
+                    value={paperFilter}
+                    onChange={e => { setPaperFilter(e.target.value); setShowPaperDrop(true); }}
+                    onFocus={() => setShowPaperDrop(true)}
+                    onBlur={() => setTimeout(() => setShowPaperDrop(false), 150)}
+                    onKeyDown={e => { if (e.key === "Enter") { setShowPaperDrop(false); loadAnalytics(); } if (e.key === "Escape") setShowPaperDrop(false); }}
+                    placeholder="e.g. SUN_A"
+                    style={{ ...ainput, width:180, fontSize:12 }}
+                    autoComplete="off"
+                  />
+                  {showPaperDrop && availablePapers.filter(p => p.toLowerCase().includes(paperFilter.toLowerCase())).length > 0 && (
+                    <div style={{ position:"absolute", top:"100%", left:0, right:0, zIndex:999, background:"#1e293b", border:"1px solid rgba(99,102,241,0.4)", borderRadius:8, marginTop:4, maxHeight:200, overflowY:"auto", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+                      {availablePapers
+                        .filter(p => p.toLowerCase().includes(paperFilter.toLowerCase()))
+                        .map(p => (
+                          <div
+                            key={p}
+                            onMouseDown={() => { setPaperFilter(p); setShowPaperDrop(false); }}
+                            style={{ padding:"9px 14px", cursor:"pointer", fontSize:13, color: p === paperFilter ? "#a5b4fc" : "#e2e8f0", background: p === paperFilter ? "rgba(99,102,241,0.2)" : "transparent", borderBottom:"1px solid rgba(255,255,255,0.05)", display:"flex", justifyContent:"space-between", alignItems:"center" }}
+                            onMouseEnter={e => e.currentTarget.style.background="rgba(99,102,241,0.12)"}
+                            onMouseLeave={e => e.currentTarget.style.background= p === paperFilter ? "rgba(99,102,241,0.2)" : "transparent"}
+                          >
+                            <span>{p}</span>
+                            {p === paperFilter && <span style={{ color:"#6366f1", fontSize:10 }}>selected</span>}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => { setShowPaperDrop(false); loadAnalytics(); }} disabled={analyticsLoading} style={abtn("primary")}>{analyticsLoading ? "Loading..." : "Load"}</button>
                 {analyticsData?.byStudent?.length > 0 && (<>
                   <button onClick={downloadAnalyticsCSV} style={{ ...abtn("success"), fontSize:12, padding:"8px 14px" }}>CSV</button>
                   <button onClick={downloadAnalyticsPDF} style={{ ...abtn("ghost"), fontSize:12, padding:"8px 14px" }}>PDF Report</button>
