@@ -162,7 +162,6 @@ async function sbFetchQuestions(paperId = "NEET_2025") {
       solution_text:         q.solution_text || q.solution || "",
       solution_eq:           q.solution_eq || "",
       solution_diagram_data: "",  // loaded on-demand
-      year:                  2025,
     }));
 
     return { questions, error: null, source: "supabase" };
@@ -572,7 +571,7 @@ function AdminScreen({ onSignOut }) {
   const loadStudents = async () => {
     setLoadingStudents(true);
     const { data } = await supabase.from("test_results")
-      .select("id, user_id, student_name, student_email, score, correct, wrong, unattempted, total, created_at, year, percentile, subject_times, paper_id")
+      .select("id, user_id, student_name, student_email, score, correct, wrong, unattempted, total, created_at, percentile, subject_times, paper_id")
       .order("created_at", { ascending: false })
       .limit(500);
     if (data) setStudents(data);
@@ -3481,7 +3480,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
 // 
 // INSTRUCTIONS
 // 
-function InstructionsScreen({ year, onBegin, onBack, branding = {} }) {
+function InstructionsScreen({ onBegin, onBack, branding = {} }) {
   const [agreed, setAgreed] = useState(false);
   return (
     <div style={{ minHeight: "100vh", ...brandingBg(branding), fontFamily: "'Crimson Pro', Georgia, serif", padding: "2rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -3611,7 +3610,7 @@ function Palette({ questions, answers, currentIdx, onJump, marked, visited }) {
 // 
 // EXAM SCREEN
 // 
-function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWindowStart, disableSubmit, branding = {} }) {
+function ExamScreen({ questions, onFinish, settings, examWindowEnd, examWindowStart, disableSubmit, branding = {} }) {
   const restoreSession = () => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
@@ -3727,7 +3726,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWi
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         questionIds: questions.map(q => q.id),
         idx, answers, marked: [...marked], bookmarks: [...bookmarks], visited: [...visited],
-        timeLeft, year, timePerQ: timePerQ.current,
+        timeLeft, timePerQ: timePerQ.current,
         subjectTimes: subjectTimes.current, savedAt: Date.now(),
       }));
     } catch (_) {}
@@ -4110,7 +4109,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWi
 // 
 // RESULT SCREEN
 // 
-function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSignOut, branding = {} }) {
+function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, branding = {} }) {
   const [expandId,    setExpandId]    = useState(null);
   const [filterSub,   setFilterSub]   = useState("All");
   const [filterStatus,setFilterStatus]= useState("All");
@@ -4608,7 +4607,6 @@ function subjectColors(i) {
 export default function App() {
   const [screen,       setScreen]       = useState(SCREEN.LANDING);
   const [user,         setUser]         = useState(null);
-  const year = 2025; // fixed - no year selector
   const [questions,    setQuestions]    = useState([]);
   const [finalAnswers, setFinalAnswers] = useState({});
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
@@ -4834,7 +4832,7 @@ export default function App() {
     const studentName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
     if (meta) meta.testName = activeTest?.test_name || "NEET Mock Test";
     const payload = {
-      year, score, correct, wrong, unattempted,
+      score, correct, wrong, unattempted,
       total: questions.length, percentile,
       time_per_question: meta?.timePerQ || {},
       subject_times:     meta?.subjectTimes || {},
@@ -5097,10 +5095,10 @@ export default function App() {
       {screen === SCREEN.ADMIN_AUTH   && <AdminAuthScreen onSuccess={() => setScreen(SCREEN.ADMIN)} onBack={() => setScreen(SCREEN.LANDING)} branding={branding} />}
       {screen === SCREEN.ADMIN        && <AdminScreen onSignOut={() => setScreen(SCREEN.LANDING)} />}
       {screen === SCREEN.DASHBOARD    && user && <Dashboard user={user} onStart={handleStartYear} onSignOut={handleSignOut} settings={settings} branding={branding} />}
-      {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen year={year} onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} branding={branding} />}
-      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} year={year} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} examWindowStart={examWindowStart} disableSubmit={disableSubmit} branding={branding} />}
+      {screen === SCREEN.INSTRUCTIONS && <InstructionsScreen onBegin={() => setScreen(SCREEN.EXAM)} onBack={() => { try { localStorage.removeItem(SESSION_KEY); } catch(_){} setScreen(SCREEN.DASHBOARD); }} branding={branding} />}
+      {screen === SCREEN.EXAM         && <ExamScreen questions={questions} onFinish={handleFinish} settings={settings} examWindowEnd={examWindowEnd} examWindowStart={examWindowStart} disableSubmit={disableSubmit} branding={branding} />}
       {screen === SCREEN.RESULT       && (
-        <ResultScreen questions={questions} answers={finalAnswers} year={year} user={user} meta={finalMeta} branding={branding}
+        <ResultScreen questions={questions} answers={finalAnswers} user={user} meta={finalMeta} branding={branding}
           onDashboard={() => { try { localStorage.removeItem("neet_last_result"); } catch (_) {} setFinalAnswers({}); setFinalMeta({}); setScreen(SCREEN.DASHBOARD); }}
           onSignOut={handleSignOut} />
       )}
