@@ -1364,7 +1364,7 @@ function AdminScreen({ onSignOut }) {
       (classCount > 0 ?
       "<h2>Class Comparison</h2>" +
       "<div style='display:flex;gap:12px;flex-wrap:wrap;margin:12px 0'>" +
-      "<div style='padding:12px 20px;background:#f3f4f6;border-radius:8px;text-align:center;min-width:110px'><div style='font-size:1.5em;font-weight:bold;color:#312e81'>" + score + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>This Student</div></div>" +
+      "<div style='padding:12px 20px;background:#f3f4f6;border-radius:8px;text-align:center;min-width:110px'><div style='font-size:1.5em;font-weight:bold;color:#312e81'>" + score + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>You</div></div>" +
       "<div style='padding:12px 20px;background:#eff6ff;border-radius:8px;text-align:center;min-width:110px;border:1px solid #bfdbfe'><div style='font-size:1.5em;font-weight:bold;color:#1d4ed8'>" + (classAvgTotal != null ? classAvgTotal : "-") + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>Class Avg (" + classCount + " students)</div></div>" +
       "<div style='padding:12px 20px;background:#ecfdf5;border-radius:8px;text-align:center;min-width:110px;border:1px solid #a7f3d0'><div style='font-size:1.5em;font-weight:bold;color:#059669'>" + (classMaxTotal != null ? classMaxTotal : "-") + "<span style=\'font-size:0.55em;color:#9ca3af\'>/" + totalMarks + "</span></div><div style=\'font-size:11px;color:#6b7280\'>Class Highest</div></div>" +
       "</div>"
