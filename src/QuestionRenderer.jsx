@@ -12,7 +12,7 @@
 //   $$...$$ centred block math
 //   Or embed $...$ directly inside question_text anywhere
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // 
 // KaTeX loader  CDN, cached after first load
@@ -284,6 +284,10 @@ export default function QuestionRenderer({
   const optionTexts = Array.isArray(q.options) && q.options.length === 4
     ? q.options
     : [q.option_a || "", q.option_b || "", q.option_c || "", q.option_d || ""];
+  // Option images  stored as option_a_image ... option_d_image or option_images array
+  const optionImages = Array.isArray(q.option_images) && q.option_images.length === 4
+    ? q.option_images
+    : [q.option_a_image || "", q.option_b_image || "", q.option_c_image || "", q.option_d_image || ""];
 
   const hasSolText = (q.solution_text || q.solution || "").trim();
   const hasSolEq   = (q.solution_eq || "").trim();
@@ -352,8 +356,26 @@ export default function QuestionRenderer({
                   {["A","B","C","D"][i]}
                 </div>
                 <div style={{ flex: 1, paddingTop: 2 }}>
-                  {/* Options also support $...$ LaTeX */}
-                  <RichBlock text={opt} color={textColor} fontSize="0.95rem" />
+                  {/* Option text  supports LaTeX */}
+                  {opt && <RichBlock text={opt} color={textColor} fontSize="0.95rem" />}
+                  {/* Option image */}
+                  {optionImages[i] && (
+                    <img
+                      src={optionImages[i]}
+                      alt={"Option " + ["A","B","C","D"][i]}
+                      style={{
+                        display: "block",
+                        maxWidth: "100%",
+                        maxHeight: 120,
+                        objectFit: "contain",
+                        borderRadius: 6,
+                        marginTop: opt ? 8 : 2,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "#1e293b",
+                        padding: 4,
+                      }}
+                    />
+                  )}
                 </div>
                 {showSolution && isCorrect && (
                   <span style={{ color: "#4ade80", fontSize: 12, flexShrink: 0, marginTop: 6, fontWeight: 600 }}>
