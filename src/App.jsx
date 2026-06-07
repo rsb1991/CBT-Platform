@@ -126,7 +126,7 @@ async function sbSignOut() {
 }
 
 // Returns { questions, error, source }
-async function sbFetchQuestions(paperId = "NEET_2025") {
+async function sbFetchQuestions(paperId = "PAPER_01") {
   const configErr = diagnoseConfig();
   if (configErr) return { questions: null, error: configErr, source: null };
 
@@ -390,7 +390,7 @@ const abtn = (v) => {
 const ainput = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", color: "#e2e8f0", fontSize: "0.92rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
 const alabel = { color: "#94a3b8", fontSize: 11, display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 };
 const acard  = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 };
-const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", option_a_image: "", option_b_image: "", option_c_image: "", option_d_image: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "", paper_id: "NEET_2025", chapter: "", difficulty: "medium" });
+const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", option_a_image: "", option_b_image: "", option_c_image: "", option_d_image: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "", paper_id: "PAPER_01", chapter: "", difficulty: "medium" });
 const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Botany: "#22c55e", Zoology: "#f43f5e" };
 
 // Helper mini-components for admin
@@ -439,7 +439,7 @@ function AdminScreen({ onSignOut }) {
   const [imgInfo,   setImgInfo]   = useState(null);
   const [msg,       setMsg]       = useState(null);
   const [search,    setSearch]    = useState("");
-  const [paperFilter, setPaperFilter] = useState("NEET_2025");
+  const [paperFilter, setPaperFilter] = useState("PAPER_01");
   const [subFilter, setSubFilter] = useState("All");
   const [editId,    setEditId]    = useState(null);
   const [csvMsg,    setCsvMsg]    = useState(null);
@@ -472,7 +472,7 @@ function AdminScreen({ onSignOut }) {
   const [batchView,       setBatchView]        = useState("list"); // list | edit | tests
   const [batchTests,      setBatchTests]       = useState([]);
   const [selectedTest,    setSelectedTest]     = useState(null);
-  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" });
+  const [testForm,        setTestForm]         = useState({ name:"", description:"", paper_id:"PAPER_01", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" });
   const [batchTestView,   setBatchTestView]    = useState("list"); // list | create | edit | report
   const [testMsg,         setTestMsg]          = useState(null);
   const [testLoading,     setTestLoading]      = useState(false);
@@ -518,7 +518,7 @@ function AdminScreen({ onSignOut }) {
   //  Load all questions 
   const loadAll = async (pid) => {
     setLoading(true);
-    const usePaper = pid || paperFilter || "NEET_2025";
+    const usePaper = pid || paperFilter || "PAPER_01";
     const { data, error } = await supabase.from("questions")
       .select("id,number,subject,type,question_text,equation,diagram_data,option_a,option_b,option_c,option_d,option_a_image,option_b_image,option_c_image,option_d_image,correct,solution_text,solution_eq,solution_diagram_data,paper_id")
       .eq("paper_id", usePaper).order("subject").order("number");
@@ -628,7 +628,7 @@ function AdminScreen({ onSignOut }) {
       solution_diagram_data: form.solution_diagram_data || "",
       option_a_image: form.option_a_image || "", option_b_image: form.option_b_image || "",
       option_c_image: form.option_c_image || "", option_d_image: form.option_d_image || "",
-      paper_id: form.paper_id || "NEET_2025", chapter: form.chapter || "", difficulty: form.difficulty || "medium",
+      paper_id: form.paper_id || "PAPER_01", chapter: form.chapter || "", difficulty: form.difficulty || "medium",
     };
     const { error } = editId
       ? await supabase.from("questions").update(payload).eq("id", editId)
@@ -644,7 +644,7 @@ function AdminScreen({ onSignOut }) {
 
   //  Edit question 
   const handleEdit = (q) => {
-    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", option_a_image: q.option_a_image || "", option_b_image: q.option_b_image || "", option_c_image: q.option_c_image || "", option_d_image: q.option_d_image || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "", paper_id: q.paper_id || "NEET_2025", chapter: q.chapter || "", difficulty: q.difficulty || "medium" });
+    setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", option_a_image: q.option_a_image || "", option_b_image: q.option_b_image || "", option_c_image: q.option_c_image || "", option_d_image: q.option_d_image || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "", paper_id: q.paper_id || "PAPER_01", chapter: q.chapter || "", difficulty: q.difficulty || "medium" });
     setImgInfo(q.diagram_data ? { kb: Math.round(q.diagram_data.length * 0.75 / 1024) } : null);
     setEditId(q.id); setTab("add");
   };
@@ -717,7 +717,7 @@ function AdminScreen({ onSignOut }) {
         solution_eq:   row.solution_eq   || "",
         chapter:       row.chapter       || "",
         difficulty:    row.difficulty    || "medium",
-        paper_id:      row.paper_id || "NEET_2025",
+        paper_id:      row.paper_id || "PAPER_01",
       });
     }
     return { rows, errors, error: null };
@@ -752,7 +752,7 @@ function AdminScreen({ onSignOut }) {
     setCsvMsg({ type: "info", text: "Uploading..." });
 
     if (replaceAll) {
-      await supabase.from("questions").delete().eq("paper_id", "NEET_2025");
+      await supabase.from("questions").delete().eq("paper_id", "PAPER_01");
     }
 
     // Upload in batches of 50
@@ -815,7 +815,7 @@ function AdminScreen({ onSignOut }) {
       const { error } = await supabase
         .from("questions")
         .update({ diagram_data: img.b64, type: "diagram" })
-        .eq("paper_id", "NEET_2025")
+        .eq("paper_id", "PAPER_01")
         .eq("number", qNum);
       if (error) fail++; else done++;
       setImgBulkProgress(done + fail + "/" + ready.length);
@@ -882,7 +882,7 @@ function AdminScreen({ onSignOut }) {
     if (!selectedBatch) return;
     const { error } = await supabase.from("batch_tests").insert([{
       batch_id: selectedBatch.id, name: testForm.name.trim(),
-      description: testForm.description.trim(), paper_id: testForm.paper_id || "NEET_2025",
+      description: testForm.description.trim(), paper_id: testForm.paper_id || "PAPER_01",
       exam_window_start: testForm.exam_window_start, exam_window_end: testForm.exam_window_end,
       attempt_limit: +testForm.attempt_limit || 1,
       access_code: testForm.access_code, access_code_enabled: testForm.access_code_enabled,
@@ -891,7 +891,7 @@ function AdminScreen({ onSignOut }) {
     }]);
     if (error) { setTestMsg({ type:"error", text: error.message }); return; }
     setTestMsg({ type:"ok", text:"Test created!" });
-    setTestForm({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled" });
+    setTestForm({ name:"", description:"", paper_id:"PAPER_01", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled" });
     loadBatchTests(selectedBatch.id);
   };
 
@@ -962,7 +962,7 @@ function AdminScreen({ onSignOut }) {
     setBatchSettings(s || {
       exam_enabled: "true", access_code: "", access_code_enabled: "false",
       resume_code: "", exam_window_start: "", exam_window_end: "",
-      attempt_limit: "0", paper_id: "NEET_2025"
+      attempt_limit: "0", paper_id: "PAPER_01"
     });
     // Load members
     const { data: m } = await supabase.from("batch_members").select("email").eq("batch_id", batch.id).order("email");
@@ -1037,7 +1037,7 @@ function AdminScreen({ onSignOut }) {
   const loadAnalytics = async () => {
     setAnalyticsLoading(true);
     setAnalyticsData(null);
-    const pid = paperFilter || "NEET_2025";
+    const pid = paperFilter || "PAPER_01";
 
     // Fetch results for this paper, fall back to all if none found
     const { data: allResults } = await supabase
@@ -1158,7 +1158,7 @@ function AdminScreen({ onSignOut }) {
     const blob = new Blob([lines.join("\n")], { type:"text/csv" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    a.href = url; a.download = (paperFilter||"NEET_2025") + "_student_analytics.csv"; a.click();
+    a.href = url; a.download = (paperFilter||"PAPER_01") + "_student_analytics.csv"; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -1166,7 +1166,7 @@ function AdminScreen({ onSignOut }) {
   const downloadAnalyticsPDF = () => {
     if (!analyticsData?.byStudent?.length) return;
     const { byStudent, totalMarks, classAvg, classMax, classMin } = analyticsData;
-    const pid = paperFilter || "NEET_2025";
+    const pid = paperFilter || "PAPER_01";
     const win = window.open("", "_blank");
     if (!win) return;
     const rows = byStudent.map((s,i) => {
@@ -1522,7 +1522,7 @@ function AdminScreen({ onSignOut }) {
                   ["solution_text", "Explanation of answer"],
                   ["chapter", "Topic name (optional)"],
                   ["difficulty", "easy / medium / hard (optional)"],
-                  ["paper_id", "Test ID e.g. NEET_2025 (optional, defaults to NEET_2025)"],
+                  ["paper_id", "Test ID e.g. PAPER_01 (optional, defaults to PAPER_01)"],
                 ].map(([k,v]) => (
                   <div key={k} style={{ fontSize: 12 }}>
                     <span style={{ color: "#fbbf24", fontFamily: "monospace" }}>{k}</span>
@@ -1535,9 +1535,9 @@ function AdminScreen({ onSignOut }) {
               <button
                 onClick={() => {
                   const sample = "number,subject,question_text,equation,image,option_a,option_b,option_c,option_d,correct,solution_text,solution_eq,chapter,difficulty,paper_id\n" +
-                    "1,Physics,A ball thrown at 20 m/s max height (g=10):,,q1.jpg,10 m,20 m,30 m,40 m,1,h=u2/2g=20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy,NEET_2025\n" +
-                    "2,Chemistry,Hybridization of carbon in diamond:,,,sp,sp2,sp3,sp3d,2,4 sigma bonds so sp3.,,Bonding,medium,NEET_2025\n" +
-                    "3,Physics,SI unit of electric field:,,,C/m,N/C,N.m,J/C2,1,E=F/q so N/C.,,Electrostatics,easy,BATCH_B\n";
+                    "1,Physics,A ball thrown at 20 m/s max height (g=10):,,q1.jpg,10 m,20 m,30 m,40 m,1,h=u2/2g=20 m.,$h=\\frac{u^2}{2g}$,Kinematics,easy,PAPER_01\n" +
+                    "2,Chemistry,Hybridization of carbon in diamond:,,,sp,sp2,sp3,sp3d,2,4 sigma bonds so sp3.,,Bonding,medium,PAPER_01\n" +
+                    "3,Physics,SI unit of electric field:,,,C/m,N/C,N.m,J/C2,1,E=F/q so N/C.,,Electrostatics,easy,PAPER_02\n";
                   const blob = new Blob([sample], { type: "text/csv" });
                   const url  = URL.createObjectURL(blob);
                   const a    = document.createElement("a");
@@ -1647,7 +1647,7 @@ function AdminScreen({ onSignOut }) {
             {msg && <div style={mstyle(msg)}>{msg.text}</div>}
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ color: "#64748b", fontSize: 12, flexShrink: 0 }}>Paper ID:</span>
-              <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="e.g. NEET_2025" style={{ ...ainput, width: 160 }} />
+              <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="e.g. PAPER_01" style={{ ...ainput, width: 160 }} />
               <button onClick={() => loadAll(paperFilter)} style={abtn("primary")}>Load</button>
               <span style={{ color: "#475569", fontSize: 11 }}>Tip: type paper_id and click Load to switch tests</span>
             </div>
@@ -1822,7 +1822,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
                   <label style={alabel}>Paper ID</label>
-                  <input value="NEET_2025" disabled style={{ ...settingInput, opacity: 0.5, cursor: "not-allowed" }} />
+                  <input value={paperFilter || "PAPER_01"} disabled style={{ ...settingInput, opacity: 0.5, cursor: "not-allowed" }} />
                   <div style={{ color: "#475569", fontSize: 11, marginTop: 4 }}>Fixed - all questions use this ID</div>
                 </div>
                 <div>
@@ -1913,7 +1913,7 @@ function AdminScreen({ onSignOut }) {
                 {/* TEST LIST */}
                 {batchTestView === "list" && (
                   <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                    <button onClick={() => { setSelectedTest(null); setTestForm({ name:"", description:"", paper_id:"NEET_2025", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" }); setBatchTestView("create"); }} style={{ ...abtn("success"), alignSelf:"flex-start" }}>+ Schedule New Test</button>
+                    <button onClick={() => { setSelectedTest(null); setTestForm({ name:"", description:"", paper_id:"PAPER_01", exam_window_start:"", exam_window_end:"", attempt_limit:"1", access_code:"", access_code_enabled:"false", resume_code:"", status:"scheduled", manual_release:"false" }); setBatchTestView("create"); }} style={{ ...abtn("success"), alignSelf:"flex-start" }}>+ Schedule New Test</button>
 
                     {testLoading ? <div style={{ textAlign:"center", color:"#64748b", padding:30 }}>Loading...</div>
                     : batchTests.length === 0 ? <div style={{ textAlign:"center", color:"#475569", padding:30 }}>No tests scheduled. Create one above.</div>
@@ -2217,7 +2217,7 @@ function AdminScreen({ onSignOut }) {
                     {/* Paper ID */}
                     <div>
                       <label style={alabel}>Paper ID</label>
-                      <input value={batchSettings.paper_id || "NEET_2025"} onChange={e => setBatchSettings(p => ({ ...p, paper_id: e.target.value }))} placeholder="e.g. NEET_2025, NEET_2024" style={{ ...ainput, maxWidth: 220 }} />
+                      <input value={batchSettings.paper_id || "PAPER_01"} onChange={e => setBatchSettings(p => ({ ...p, paper_id: e.target.value }))} placeholder="e.g. PAPER_01, PAPER_02" style={{ ...ainput, maxWidth: 220 }} />
                       <div style={{ color: "#475569", fontSize: 11, marginTop: 4 }}>Questions with this paper_id will be shown to this batch</div>
                     </div>
                   </div>
@@ -2652,7 +2652,7 @@ function AdminScreen({ onSignOut }) {
                 <div style={{ color:"#64748b", fontSize:12, marginTop:2 }}>Per-student results and question difficulty</div>
               </div>
               <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="Paper ID e.g. NEET_2025" style={{ ...ainput, width:180, fontSize:12 }} />
+                <input value={paperFilter} onChange={e => setPaperFilter(e.target.value)} placeholder="e.g. PAPER_01" style={{ ...ainput, width:180, fontSize:12 }} />
                 <button onClick={loadAnalytics} disabled={analyticsLoading} style={abtn("primary")}>{analyticsLoading ? "Loading..." : "Load"}</button>
                 {analyticsData?.byStudent?.length > 0 && (<>
                   <button onClick={downloadAnalyticsCSV} style={{ ...abtn("success"), fontSize:12, padding:"8px 14px" }}>CSV</button>
@@ -3176,7 +3176,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
     }
     if (eff?.exam_enabled === "false") { setAccessErr("Exam access is currently disabled."); return; }
     setAccessErr("");
-    onStart(eff?.paper_id || "NEET_2025", nextTest ? {
+    onStart(eff?.paper_id || "PAPER_01", nextTest ? {
       batch_test_id:     nextTest.id,
       batch_id:          nextTest.batch_id,
       test_name:         nextTest.name,
@@ -3417,7 +3417,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
                       <div style={{ width: 48, height: 48, borderRadius: "50%", background: pct2>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border: "2px solid "+(pct2>=50?"#22c55e":"#ef4444"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: pct2>=50?"#4ade80":"#f87171", fontSize: 13, flexShrink: 0 }}>{pct2}%</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, color: "#c7d2fe", fontSize: "0.9rem" }}>{r.test_name || "Mock Test"}</div>
-                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}{r.paper_id && r.paper_id !== "NEET_2025" ? <span style={{ marginLeft: 8, color: "#475569" }}>{r.paper_id}</span> : ""}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}{r.paper_id ? <span style={{ marginLeft: 8, color: "#475569" }}>{r.paper_id}</span> : ""}</div>
                         <div style={{ marginTop: 5, background: "rgba(0,0,0,0.3)", borderRadius: 99, height: 4, maxWidth: 200 }}>
                           <div style={{ height: "100%", borderRadius: 99, background: pct2>=50?"#22c55e":"#ef4444", width: Math.max(0,pct2)+"%" }} />
                         </div>
@@ -4751,7 +4751,7 @@ export default function App() {
   };
 
   const handleStartYear = async (paperId, testMeta) => {
-    const usePaperId = paperId || "NEET_2025";
+    const usePaperId = paperId || "PAPER_01";
     if (testMeta) setActiveTest(testMeta);
     else setActiveTest(null);
     // Store the exam window end so ExamScreen can auto-submit at the right time
@@ -4798,7 +4798,7 @@ export default function App() {
         answers: ans,
         meta: meta || {},
         questionIds: questions.map(q => q.id),
-        paper_id: questions[0]?.paper_id || "NEET_2025",
+        paper_id: questions[0]?.paper_id || "PAPER_01",
         savedAt: Date.now(),
       }));
     } catch (_) {}
@@ -4840,7 +4840,7 @@ export default function App() {
       answers:           ans,
       student_name:      studentName,
       student_email:     user?.email || "",
-      paper_id:          questions[0]?.paper_id || "NEET_2025",
+      paper_id:          questions[0]?.paper_id || "PAPER_01",
       ...(activeTest ? {
         batch_test_id: activeTest.batch_test_id,
         batch_id:      activeTest.batch_id,
@@ -4922,7 +4922,7 @@ export default function App() {
     ] : isNoData ? [
       "Go to supabase.com  your project  SQL Editor",
       "Paste the INSERT questions SQL from the earlier step",
-      "Make sure paper_id = 'NEET_2025' in every row",
+      "Make sure paper_id matches the Paper ID you entered (e.g. PAPER_01)",
       "Click Run, then try again",
     ] : isRLS ? [
       "Go to supabase.com  your project  SQL Editor",
