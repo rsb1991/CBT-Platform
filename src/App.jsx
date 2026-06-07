@@ -21,221 +21,11 @@ const SESSION_KEY = "neet_exam_session"; // localStorage key for exam persistenc
 const SCREEN = { LANDING: "landing", AUTH: "auth", ADMIN_AUTH: "admin_auth", ADMIN: "admin", DASHBOARD: "dashboard", INSTRUCTIONS: "instructions", EXAM: "exam", RESULT: "result" };
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "admin@neet2025.in";
 const ADMIN_PASS  = import.meta.env.VITE_ADMIN_PASS  || "Neet@Admin#2025";
-const AVAILABLE_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
 
 // Theme context - shared across all components
 const ThemeCtx = { dark: true }; // mutable object, avoids full React context overhead
 const getTheme = () => ThemeCtx.dark;
 
-// 
-// FULL 180-QUESTION BANK (45 per subject)
-// In production these come from Supabase. This local bank is the demo fallback.
-// 
-const buildLocalQuestions = (year) => {
-  // We generate year-tagged versions so the year selector is meaningful
-  const seed = year % 100;
-  const physics = [
-    { text: "A ball is thrown vertically upward with velocity 20 m/s. Max height (g=10):", options: ["10 m","20 m","30 m","40 m"], correct: 1, solution: "h = u/2g = 400/20 = 20 m." },
-    { text: "The SI unit of electric field intensity is:", options: ["C/m","N/C","Nm","J/C"], correct: 1, solution: "E = F/q  N/C." },
-    { text: "Work done moving 2C across 12V potential difference:", options: ["6 J","10 J","24 J","14 J"], correct: 2, solution: "W = qV = 212 = 24 J." },
-    { text: "Dimensional formula of power is:", options: ["[MLT]","[MLT]","[MLT]","[MLT]"], correct: 1, solution: "Power = Work/Time = [MLT]/[T] = [MLT]." },
-    { text: "Which law states that electric flux  enclosed charge?", options: ["Coulomb's","Faraday's","Gauss's","Ampere's"], correct: 2, solution: "Gauss's Law:  = Q/." },
-    { text: "A concave mirror has focal length 15 cm. Radius of curvature:", options: ["7.5 cm","15 cm","30 cm","45 cm"], correct: 2, solution: "R = 2f = 30 cm." },
-    { text: "The refractive index of glass is 1.5. Speed of light in glass (c=310):", options: ["110","210","310","410"], correct: 1, solution: "v = c/n = 310/1.5 = 210 m/s." },
-    { text: "Which particle has zero rest mass?", options: ["Electron","Proton","Neutron","Photon"], correct: 3, solution: "Photons are massless particles of light." },
-    { text: "The phenomenon of bending of light around obstacles is:", options: ["Reflection","Refraction","Diffraction","Polarization"], correct: 2, solution: "Diffraction is the bending of light around edges of obstacles." },
-    { text: "Half-life of radioactive substance is 20 min. After 60 min, fraction remaining:", options: ["1/2","1/4","1/8","1/16"], correct: 2, solution: "60/20 = 3 half-lives  (1/2) = 1/8." },
-    { text: "Ohm's law relates:", options: ["V and I","V and R","I and R","P and I"], correct: 0, solution: "V = IR; Ohm's law relates voltage (V) and current (I)." },
-    { text: "Which mirror is used as a rear-view mirror?", options: ["Plane","Concave","Convex","Parabolic"], correct: 2, solution: "Convex mirror gives wide field of view  used as rear-view." },
-    { text: "SI unit of magnetic flux:", options: ["Tesla","Weber","Gauss","Henry"], correct: 1, solution: "Magnetic flux is measured in Weber (Wb)." },
-    { text: "Photoelectric effect was explained by:", options: ["Maxwell","Planck","Einstein","Bohr"], correct: 2, solution: "Einstein explained the photoelectric effect using photons (Nobel 1921)." },
-    { text: "When a body moves in a circle, centripetal acceleration = ?", options: ["vr","v/r","v/r","r/v"], correct: 2, solution: "a_c = v/r directed towards centre." },
-    { text: "The energy of a photon with frequency  is:", options: ["h","h/","h","h"], correct: 2, solution: "E = h (Planck's equation)." },
-    { text: "Transformer works on the principle of:", options: ["Self-induction","Mutual induction","Eddy currents","Magnetism"], correct: 1, solution: "Transformer uses mutual electromagnetic induction." },
-    { text: "Newton's 2nd law: F = ma. SI unit of force:", options: ["Joule","Watt","Newton","Pascal"], correct: 2, solution: "Force is measured in Newtons (N = kgm/s)." },
-    { text: "Which has highest penetrating power?", options: ["Alpha","Beta","Gamma","X-ray"], correct: 2, solution: "Gamma rays have the highest penetrating power." },
-    { text: "In a series LCR circuit at resonance:", options: ["XL > XC","XC > XL","XL = XC","Z = XL"], correct: 2, solution: "At resonance, XL = XC, so impedance Z = R (minimum)." },
-    { text: "A convex lens is also called:", options: ["Diverging lens","Converging lens","Plane lens","Concave lens"], correct: 1, solution: "Convex (converging) lens brings parallel rays to a focus." },
-    { text: "The escape velocity from Earth's surface (g=10, R=6400 km):", options: ["8 km/s","11.2 km/s","15 km/s","7 km/s"], correct: 1, solution: "v_e = (2gR)  11.2 km/s." },
-    { text: "In which state is pressure exerted equally in all directions?", options: ["Solid","Liquid","Gas","Plasma"], correct: 1, solution: "Pascal's law: pressure in fluids acts equally in all directions." },
-    { text: "The angle of incidence equals angle of reflection  this is:", options: ["Snell's law","Law of reflection","Brewster's law","Diffraction"], correct: 1, solution: "First law of reflection: angle of incidence = angle of reflection." },
-    { text: "De Broglie wavelength  = h/p. This represents:", options: ["Wave nature of light","Wave nature of matter","Particle nature","None"], correct: 1, solution: "De Broglie: matter (particles) also has wave properties." },
-    { text: "Capacitance of a parallel plate capacitor ", options: ["d/A","A/d","1/Ad","Ad"], correct: 1, solution: "C = A/d; capacity proportional to plate area A and inversely to distance d." },
-    { text: "SI unit of pressure:", options: ["Newton","Pascal","Joule","Bar"], correct: 1, solution: "Pressure is measured in Pascal (Pa = N/m)." },
-    { text: "Which type of wave cannot travel through vacuum?", options: ["Light","Radio","Sound","X-ray"], correct: 2, solution: "Sound is a mechanical (longitudinal) wave requiring a medium." },
-    { text: "Lenz's law is related to:", options: ["Refraction","Electromagnetic induction","Electrostatics","Gravitation"], correct: 1, solution: "Lenz's law determines the direction of induced EMF." },
-    { text: "Which quantity is conserved in elastic collision?", options: ["KE only","Momentum only","Both KE and momentum","Neither"], correct: 2, solution: "Elastic collision: both kinetic energy and momentum are conserved." },
-    { text: "The nucleus of an atom contains:", options: ["Electrons only","Protons & electrons","Protons & neutrons","Neutrons only"], correct: 2, solution: "Nucleus contains protons (positive) and neutrons (neutral)." },
-    { text: "Magnetic field due to a long straight current-carrying wire ", options: ["r","1/r","r","1/r"], correct: 1, solution: "B = I/2r  inversely proportional to distance r." },
-    { text: "The phenomenon responsible for formation of rainbow is:", options: ["Reflection only","Refraction only","Dispersion & TIR","Diffraction"], correct: 2, solution: "Rainbow forms by dispersion and total internal reflection in droplets." },
-    { text: "In a p-n junction diode, forward bias causes:", options: ["Wider depletion layer","Narrower depletion layer","No change","Reverse current"], correct: 1, solution: "Forward bias reduces/narrows the depletion layer, allowing current." },
-    { text: "The first law of thermodynamics is a statement of:", options: ["Conservation of momentum","Conservation of energy","Entropy","Newton's 2nd law"], correct: 1, solution: "1st law: U = Q  W (conservation of energy)." },
-    { text: "Velocity of sound is maximum in:", options: ["Air","Water","Steel","Vacuum"], correct: 2, solution: "Sound travels fastest in solids; v_steel  5000 m/s." },
-    { text: "A body of mass m at height h has PE =", options: ["mgh","mgh","mg/h","mgh"], correct: 1, solution: "Gravitational potential energy = mgh." },
-    { text: "Which gate gives output 1 only when all inputs are 1?", options: ["OR","AND","NAND","NOR"], correct: 1, solution: "AND gate: output is 1 only when ALL inputs are 1." },
-    { text: "The time period of a simple pendulum depends on:", options: ["Mass","Length & g","Amplitude","All of these"], correct: 1, solution: "T = 2(L/g); independent of mass and small amplitude." },
-    { text: "Huygen's principle is used to explain:", options: ["Photoelectric effect","Wave propagation","Nuclear fission","Electrolysis"], correct: 1, solution: "Huygens' principle describes propagation of wave fronts." },
-    { text: "The ratio of nuclear density to atomic density is approximately:", options: ["10","10","10","10"], correct: 3, solution: "Nuclear density (~10 kg/m) >> atomic density by factor ~10." },
-    { text: "Which electromagnetic wave has the longest wavelength?", options: ["Gamma","X-ray","Radio","UV"], correct: 2, solution: "Radio waves have wavelengths from mm to km  longest in EM spectrum." },
-    { text: "Angle of minimum deviation for a prism depends on:", options: ["Refractive index & angle of prism","Colour only","Size only","Density only"], correct: 0, solution: "_min depends on both the refractive index () and prism angle (A)." },
-    { text: "Bohr's atomic model explained the spectrum of:", options: ["All atoms","Hydrogen atom","Noble gases","Heavy metals"], correct: 1, solution: "Bohr's model successfully explains the hydrogen spectrum." },
-    { text: "In photoelectric effect, stopping potential depends on:", options: ["Intensity","Frequency of light","Metal area","None"], correct: 1, solution: "Stopping potential V = (h  )/e; depends only on frequency." },
-  ];
-  const chemistry = [
-    { text: "Hybridization of carbon in diamond:", options: ["sp","sp","sp","spd"], correct: 2, solution: "Diamond: each C forms 4 -bonds  sp hybridized." },
-    { text: "Which is a Lewis acid?", options: ["NH","HO","BF","OH"], correct: 2, solution: "BF is electron-deficient; accepts lone pairs  Lewis acid." },
-    { text: "Moles in 18g of water:", options: ["0.5","1","1.5","2"], correct: 1, solution: "M(HO)=18 g/mol; 18/18 = 1 mol." },
-    { text: "The IUPAC name of CHCHO is:", options: ["Methanol","Ethanal","Ethanol","Methanal"], correct: 1, solution: "CHCHO is ethanal (acetaldehyde)." },
-    { text: "Which gas is produced when zinc reacts with dilute HSO?", options: ["O","SO","H","CO"], correct: 2, solution: "Zn + HSO  ZnSO + H" },
-    { text: "pH of a neutral solution at 25C:", options: ["0","7","14","1"], correct: 1, solution: "At 25C, neutral water has pH = 7." },
-    { text: "Avogadro's number is:", options: ["6.02210","6.02210","6.02210","3.01110"], correct: 0, solution: "N = 6.02210 mol." },
-    { text: "Which bond is present in NaCl?", options: ["Covalent","Ionic","Metallic","Hydrogen"], correct: 1, solution: "NaCl is an ionic compound  Na and Cl ions." },
-    { text: "Alkanes have the general formula:", options: ["CH","CH","CH","CH"], correct: 1, solution: "Saturated hydrocarbons (alkanes): CH." },
-    { text: "Which is the strongest oxidising agent among halogens?", options: ["F","Cl","Br","I"], correct: 0, solution: "Fluorine is the most electronegative element  strongest oxidiser." },
-    { text: "The number of protons in an atom defines its:", options: ["Mass number","Atomic number","Neutron number","Valency"], correct: 1, solution: "Atomic number Z = number of protons." },
-    { text: "Arrhenius acid is a substance that:", options: ["Accepts H","Donates OH","Donates H","Accepts OH"], correct: 2, solution: "Arrhenius acid donates H ions in water." },
-    { text: "The gas law PV = nRT is called:", options: ["Boyle's","Charles'","Ideal Gas","Van der Waals"], correct: 2, solution: "PV = nRT is the ideal (perfect) gas equation." },
-    { text: "Which element has the highest electronegativity?", options: ["Oxygen","Chlorine","Fluorine","Nitrogen"], correct: 2, solution: "Fluorine has electronegativity 4.0 (Pauling scale)  highest of all." },
-    { text: "Functional group in alcohols:", options: ["-CHO","-OH","-COOH","-NH"], correct: 1, solution: "Alcohols contain the hydroxyl (-OH) functional group." },
-    { text: "The process of gaining electrons is called:", options: ["Oxidation","Reduction","Combustion","Sublimation"], correct: 1, solution: "Reduction: gain of electrons (OIL RIG)." },
-    { text: "Which catalyst is used in Haber process?", options: ["VO","Pt","Fe","Ni"], correct: 2, solution: "Iron (Fe) with KO/AlO promoters catalyses N + H  NH." },
-    { text: "Normality = Molarity  n-factor. This relation holds for:", options: ["All solutions","Acids & bases only","Redox only","Salts only"], correct: 0, solution: "N = M  n-factor applies to all solute types." },
-    { text: "The orbital with the highest energy in ground state H:", options: ["1s","2s","2p","3s"], correct: 0, solution: "H ground state has one electron in 1s." },
-    { text: "Which type of isomerism is shown by CHCHOH and CHOCH?", options: ["Chain","Position","Functional group","Optical"], correct: 2, solution: "Same molecular formula CHO but different functional groups  functional isomerism." },
-    { text: "Enthalpy change (H) at constant pressure equals:", options: ["U","q_p","G","S"], correct: 1, solution: "At constant pressure, H = q_p (heat absorbed)." },
-    { text: "Which noble gas is used in advertisement signs?", options: ["He","Ar","Ne","Kr"], correct: 2, solution: "Neon glows red-orange in discharge tubes  used in neon signs." },
-    { text: "Equilibrium constant K depends on:", options: ["Concentration","Pressure","Temperature","Catalyst"], correct: 2, solution: "K changes only with temperature; concentration/pressure shift position, not K." },
-    { text: "SN2 reaction proceeds with:", options: ["Retention","Racemisation","Inversion","No stereochemistry"], correct: 2, solution: "SN2: backside attack  Walden inversion of configuration." },
-    { text: "Which salt undergoes anionic hydrolysis?", options: ["NaCl","CHCOONa","NHCl","NaHCO"], correct: 1, solution: "CHCOONa is salt of weak acid + strong base  anion hydrolyses." },
-    { text: "Hybridization of N in NH:", options: ["sp","sp","sp","spd"], correct: 2, solution: "N in NH: 3 bond pairs + 1 lone pair  sp hybridized." },
-    { text: "Colligative properties depend on:", options: ["Nature of solute","Number of solute particles","Size of solute","Charge of solute"], correct: 1, solution: "Colligative properties depend only on the number of solute particles." },
-    { text: "Boiling point of water at higher altitude:", options: ["100C","More than 100C","Less than 100C","Same"], correct: 2, solution: "Lower atmospheric pressure at altitude  water boils below 100C." },
-    { text: "Which reaction type is CH + Cl  CHCl + HCl (in light)?", options: ["Addition","Substitution","Elimination","Rearrangement"], correct: 1, solution: "Free-radical substitution of H by Cl in alkanes." },
-    { text: "The VSEPR model predicts shape based on:", options: ["Bond length","Electron pair repulsion","Nuclear charge","Atomic radius"], correct: 1, solution: "VSEPR: electron pairs (bonding + lone) repel each other to minimise repulsion." },
-    { text: "Which oxide is amphoteric?", options: ["NaO","CaO","AlO","SO"], correct: 2, solution: "AlO reacts with both acids and bases  amphoteric oxide." },
-    { text: "Rate of reaction increases with temperature because:", options: ["More collisions only","More effective collisions","Less activation energy","All"], correct: 1, solution: "Higher T  higher KE  more molecules have E  E_a  more effective collisions." },
-    { text: "Galvanic cell converts:", options: ["Electrical to chemical","Chemical to electrical","Heat to electrical","Mechanical to electrical"], correct: 1, solution: "Galvanic (voltaic) cells convert chemical energy to electrical energy." },
-    { text: "The standard electrode potential of SHE is:", options: ["+1 V","1 V","0 V","Variable"], correct: 2, solution: "Standard Hydrogen Electrode (SHE) is the reference: E = 0.00 V." },
-    { text: "Phenol reacts with FeCl to give:", options: ["Yellow","Blue","Violet","Red"], correct: 2, solution: "Phenol + FeCl  violet/purple complex (characteristic test)." },
-    { text: "Which process is used to obtain pure copper?", options: ["Zone refining","Electrolytic refining","Vapour phase","Distillation"], correct: 1, solution: "Copper is purified by electrolytic refining." },
-    { text: "Molecular formula of glucose:", options: ["CHO","CHO","CHO","CHO"], correct: 1, solution: "Glucose: CHO (hexose sugar)." },
-    { text: "The shape of PCl molecule:", options: ["Trigonal planar","Square planar","Trigonal bipyramidal","Octahedral"], correct: 2, solution: "PCl: spd hybridized  trigonal bipyramidal." },
-    { text: "Raoult's law is applicable to:", options: ["All solutions","Ideal solutions","Ionic solutions","Gaseous mixtures"], correct: 1, solution: "Raoult's law applies strictly to ideal solutions." },
-    { text: "Nessler's reagent detects:", options: ["NO","NH","SO","Cl"], correct: 1, solution: "Nessler's reagent (K[HgI]/KOH) gives reddish-brown ppt with NH." },
-    { text: "Peptide bond is formed between:", options: ["Two carboxyl groups","Two amino groups","Amino & carboxyl groups","Two hydroxyl groups"], correct: 2, solution: "Peptide bond (CONH) forms between COOH of one AA and NH of another." },
-    { text: "Which polymer is used in making Teflon?", options: ["Polystyrene","Polytetrafluoroethylene","Polyethylene","PVC"], correct: 1, solution: "Teflon is polytetrafluoroethylene (PTFE)." },
-    { text: "Diazotisation reaction involves:", options: ["OH group","NH group","NO group","COOH group"], correct: 1, solution: "Primary aromatic amines (NH) undergo diazotisation with NaNO/HCl." },
-    { text: "Beer-Lambert law relates absorbance to:", options: ["Temperature","Concentration & path length","Refractive index","Pressure"], correct: 1, solution: "A = cl; absorbance proportional to concentration (c) and path length (l)." },
-  ];
-  const botany = [
-    { text: "Organelle known as 'powerhouse of the cell':", options: ["Ribosome","Lysosome","Mitochondria","Golgi Body"], correct: 2, solution: "Mitochondria produce ATP  called the powerhouse." },
-    { text: "Photosynthesis occurs in:", options: ["Nucleus","Mitochondria","Vacuole","Chloroplast"], correct: 3, solution: "Chloroplasts contain chlorophyll, site of photosynthesis." },
-    { text: "Conversion of glucose to ethanol by yeast:", options: ["Aerobic respiration","Fermentation","Photosynthesis","Transpiration"], correct: 1, solution: "Anaerobic fermentation by yeast: glucose  ethanol + CO." },
-    { text: "Which plant tissue is responsible for growth?", options: ["Meristematic","Permanent","Epidermal","Vascular"], correct: 0, solution: "Meristematic tissue contains actively dividing cells." },
-    { text: "The process of water movement through xylem is driven by:", options: ["Root pressure","Transpiration pull","Osmosis","Diffusion"], correct: 1, solution: "Transpiration pull (cohesion-tension theory) is the main driving force." },
-    { text: "DNA replication is:", options: ["Conservative","Semi-conservative","Dispersive","Random"], correct: 1, solution: "Watson & Crick proposed semi-conservative replication (confirmed by Meselson-Stahl)." },
-    { text: "Photoperiodism was first described by:", options: ["Darwin","Garner & Allard","Went","Blackman"], correct: 1, solution: "Garner and Allard (1920) discovered photoperiodism in tobacco." },
-    { text: "The monomer of DNA is:", options: ["Amino acid","Glucose","Nucleotide","Fatty acid"], correct: 2, solution: "DNA is a polynucleotide; monomer = nucleotide (base + sugar + phosphate)." },
-    { text: "Which pigment absorbs red and far-red light?", options: ["Chlorophyll","Carotenoid","Phytochrome","Xanthophyll"], correct: 2, solution: "Phytochrome exists in Pr (red-absorbing) and Pfr (far-red-absorbing) forms." },
-    { text: "Krebs cycle occurs in:", options: ["Cytoplasm","Mitochondrial matrix","Inner membrane","Nucleus"], correct: 1, solution: "Krebs (TCA) cycle occurs in the mitochondrial matrix." },
-    { text: "Calvin cycle is also called:", options: ["C3 cycle","C4 cycle","Hatch-Slack","Crassulacean"], correct: 0, solution: "Calvin cycle = C3 pathway; first stable product is 3-PGA." },
-    { text: "The enzyme that fixes CO in C3 plants is:", options: ["PEP carboxylase","RuBisCO","Pyruvate kinase","ATP synthase"], correct: 1, solution: "RuBisCO (ribulose-1,5-bisphosphate carboxylase/oxygenase) fixes CO in C3 plants." },
-    { text: "Auxin promotes cell elongation by:", options: ["Decreasing wall rigidity","Increasing wall plasticity","DNA synthesis","Protein degradation"], correct: 1, solution: "Auxin acidifies cell wall  increases plasticity  elongation." },
-    { text: "Meiosis occurs in:", options: ["Somatic cells","Gamete mother cells","Nerve cells","Meristematic cells"], correct: 1, solution: "Meiosis (reduction division) occurs in gamete mother cells." },
-    { text: "The scientific name of mango is:", options: ["Mangifera indica","Mangifera mango","Indica mangifera","Solanum mango"], correct: 0, solution: "Mango: Mangifera indica (family Anacardiaceae)." },
-    { text: "Osmosis is the movement of:", options: ["Solute from high to low","Water from low to high solute","Water from high to low solute","All molecules"], correct: 2, solution: "Osmosis: water moves from hypotonic (low solute) to hypertonic (high solute)." },
-    { text: "Which part of the flower develops into fruit?", options: ["Ovule","Ovary","Stigma","Receptacle"], correct: 1, solution: "Fruit develops from the ovary after fertilisation." },
-    { text: "The double helix structure of DNA was proposed in:", options: ["1950","1953","1960","1944"], correct: 1, solution: "Watson & Crick proposed the double helix in 1953." },
-    { text: "Cytokinesis in plant cells occurs by:", options: ["Cleavage furrow","Cell plate formation","Both","Neither"], correct: 1, solution: "In plants, a cell plate forms at the metaphase plate during cytokinesis." },
-    { text: "Which plant hormone inhibits growth?", options: ["Auxin","Gibberellin","Cytokinin","Abscisic acid"], correct: 3, solution: "Abscisic acid (ABA) = stress hormone; inhibits growth, promotes dormancy." },
-    { text: "The 'lock and key' model of enzyme action was proposed by:", options: ["Koshland","Emil Fischer","Michaelis","Pauling"], correct: 1, solution: "Emil Fischer (1894) proposed the lock-and-key model of enzyme specificity." },
-    { text: "Root nodules fixing nitrogen are found in:", options: ["Cereals","Legumes","Grasses","Fungi"], correct: 1, solution: "Legumes host Rhizobium in root nodules for biological nitrogen fixation." },
-    { text: "Which type of RNA carries amino acids to the ribosome?", options: ["mRNA","rRNA","tRNA","hnRNA"], correct: 2, solution: "tRNA (transfer RNA) carries specific amino acids to the ribosome during translation." },
-    { text: "Lignin is found in:", options: ["Parenchyma","Collenchyma","Sclerenchyma","Epidermis"], correct: 2, solution: "Sclerenchyma cell walls are impregnated with lignin for mechanical support." },
-    { text: "Apical dominance is caused by:", options: ["Cytokinin","Gibberellin","Auxin","Ethylene"], correct: 2, solution: "High auxin concentration from apical bud suppresses lateral bud growth." },
-    { text: "The first organism used in recombinant DNA technology:", options: ["Yeast","E. coli","Agrobacterium","Bacillus"], correct: 1, solution: "E. coli was the first organism used in recombinant DNA technology (Boyer & Cohen, 1973)." },
-    { text: "CAM photosynthesis is an adaptation for:", options: ["Aquatic plants","Xerophytes","Shade plants","Arctic plants"], correct: 1, solution: "CAM (Crassulacean Acid Metabolism) is found in desert succulents." },
-    { text: "Pollen tube carries:", options: ["Female gametes","Male gametes","Both","Spores"], correct: 1, solution: "Pollen tube delivers two male gametes (sperm cells) to the ovule." },
-    { text: "The Operon model of gene regulation was given by:", options: ["Jacob & Monod","Watson & Crick","Beadle & Tatum","Avery"], correct: 0, solution: "Jacob and Monod proposed the lac operon model for gene regulation (1961)." },
-    { text: "Active transport requires:", options: ["No energy","ATP","Osmosis","Diffusion"], correct: 1, solution: "Active transport moves solutes against concentration gradient, requiring ATP." },
-    { text: "Chlorophyll 'a' absorbs light maximally at:", options: ["430 nm & 662 nm","500 nm & 600 nm","400 nm & 700 nm","450 nm & 700 nm"], correct: 0, solution: "Chlorophyll a: max absorption at ~430 nm (blue) and ~662 nm (red)." },
-    { text: "Which vitamin is synthesised in the skin in sunlight?", options: ["Vitamin A","Vitamin B","Vitamin C","Vitamin D"], correct: 3, solution: "UV light converts 7-dehydrocholesterol in skin to Vitamin D." },
-    { text: "The term 'gene' was coined by:", options: ["Mendel","Morgan","Johannsen","de Vries"], correct: 2, solution: "Wilhelm Johannsen coined the term 'gene' in 1909." },
-    { text: "Guttation occurs through:", options: ["Stomata","Hydathodes","Lenticels","Cuticle"], correct: 1, solution: "Guttation (exudation of liquid water) occurs through hydathodes." },
-    { text: "Vernalisation refers to promotion of flowering by:", options: ["Light","Low temperature","High temperature","Drought"], correct: 1, solution: "Vernalisation = exposure to prolonged cold promotes flowering." },
-    { text: "In angiosperms, triple fusion forms:", options: ["Zygote","Endosperm","Embryo","Seed coat"], correct: 1, solution: "Triple fusion: one sperm + 2 polar nuclei  triploid (3n) endosperm." },
-    { text: "Which plastid stores starch?", options: ["Chloroplast","Chromoplast","Amyloplast","Elaioplast"], correct: 2, solution: "Amyloplasts (leucoplasts) store starch grains." },
-    { text: "The first stable product of C4 cycle is:", options: ["3-PGA","OAA","Malate","RuBP"], correct: 1, solution: "In C4 plants, CO is first fixed into oxaloacetate (OAA)  a 4-carbon compound." },
-    { text: "Binomial nomenclature was introduced by:", options: ["Darwin","Linnaeus","Lamarck","Whittaker"], correct: 1, solution: "Carl Linnaeus introduced the binomial nomenclature system." },
-    { text: "Water potential of pure water is:", options: ["+1","1","0","Variable"], correct: 2, solution: "Pure water has maximum water potential = 0 (arbitrary reference)." },
-    { text: "Which enzyme joins Okazaki fragments?", options: ["Helicase","Primase","DNA Ligase","DNA Polymerase I"], correct: 2, solution: "DNA Ligase seals nicks and joins Okazaki fragments on the lagging strand." },
-    { text: "Photorespiration occurs in:", options: ["C3 plants","C4 plants","CAM plants","Bryophytes"], correct: 0, solution: "Photorespiration is significant in C3 plants (RuBisCO oxygenase activity)." },
-    { text: "Which hormone promotes seed germination?", options: ["ABA","Ethylene","Gibberellin","Cytokinin"], correct: 2, solution: "Gibberellins promote seed germination and stem elongation." },
-    { text: "The movement of phloem sap is explained by:", options: ["Cohesion-tension","Pressure flow hypothesis","Root pressure","Diffusion"], correct: 1, solution: "Munch's pressure flow (mass flow) hypothesis explains phloem translocation." },
-  ];
-  const zoology = [
-    { text: "Scientific name of human being:", options: ["Homo sapiens","Homo erectus","Pan troglodytes","Gorilla gorilla"], correct: 0, solution: "Humans: Homo sapiens (kingdom Animalia, family Hominidae)." },
-    { text: "Universal blood donor group:", options: ["A","B","AB","O"], correct: 3, solution: "Blood group O (Rh) lacks A & B antigens  universal donor." },
-    { text: "Functional unit of kidney:", options: ["Neuron","Nephron","Alveolus","Villus"], correct: 1, solution: "Nephron filters blood; ~1 million per kidney." },
-    { text: "The fluid-mosaic model of cell membrane was proposed by:", options: ["Danielli & Davson","Singer & Nicolson","Robertson","Gorter & Grendel"], correct: 1, solution: "Singer and Nicolson (1972) proposed the fluid mosaic model." },
-    { text: "Insulin is secreted by:", options: ["-cells","-cells","-cells","F-cells"], correct: 1, solution: "-cells of islets of Langerhans secrete insulin." },
-    { text: "The largest WBC is:", options: ["Neutrophil","Lymphocyte","Monocyte","Basophil"], correct: 2, solution: "Monocytes are the largest white blood cells." },
-    { text: "Haemoglobin contains which metal?", options: ["Cu","Fe","Zn","Mg"], correct: 1, solution: "Haemoglobin contains iron (Fe) in its haem group." },
-    { text: "Which part of brain controls body temperature?", options: ["Cerebrum","Cerebellum","Hypothalamus","Medulla"], correct: 2, solution: "Hypothalamus is the thermoregulatory centre of the brain." },
-    { text: "The number of pairs of cranial nerves in humans:", options: ["10","12","31","21"], correct: 1, solution: "Humans have 12 pairs of cranial nerves." },
-    { text: "Site of fertilisation in females:", options: ["Uterus","Ovary","Fallopian tube","Cervix"], correct: 2, solution: "Fertilisation normally occurs in the ampulla of the fallopian (uterine) tube." },
-    { text: "Which vitamin is essential for blood clotting?", options: ["Vitamin A","Vitamin D","Vitamin K","Vitamin C"], correct: 2, solution: "Vitamin K is required for synthesis of clotting factors (II, VII, IX, X)." },
-    { text: "The pacemaker of the heart is:", options: ["AV node","SA node","Bundle of His","Purkinje fibres"], correct: 1, solution: "SA (sinoatrial) node initiates the heartbeat  the natural pacemaker." },
-    { text: "AIDS is caused by:", options: ["Bacteria","Fungus","Virus (HIV)","Protozoan"], correct: 2, solution: "AIDS: Acquired Immune Deficiency Syndrome caused by Human Immunodeficiency Virus." },
-    { text: "Peristalsis is the movement of:", options: ["Blood","Food in alimentary canal","Urine","Lymph"], correct: 1, solution: "Peristalsis: rhythmic muscular contractions propel food through the gut." },
-    { text: "The process by which organisms maintain internal stability:", options: ["Homeostasis","Metamorphosis","Osmoregulation","Thermoregulation"], correct: 0, solution: "Homeostasis is the maintenance of a stable internal environment." },
-    { text: "Spermatogenesis occurs in:", options: ["Epididymis","Seminiferous tubules","Vas deferens","Prostate"], correct: 1, solution: "Spermatogenesis (sperm production) occurs in seminiferous tubules of testes." },
-    { text: "The 'Central Dogma' of molecular biology is:", options: ["DNARNAProtein","RNADNAProtein","ProteinRNADNA","DNAProteinRNA"], correct: 0, solution: "Crick's Central Dogma: DNA is transcribed to RNA, which is translated to protein." },
-    { text: "Which is the largest endocrine gland?", options: ["Adrenal","Thyroid","Pituitary","Pancreas"], correct: 1, solution: "Thyroid gland is the largest pure endocrine gland." },
-    { text: "Phagocytosis is the engulfing of:", options: ["Gases","Solid particles","Liquids","Ions"], correct: 1, solution: "Phagocytosis = 'cell eating'  engulfing of solid particles/microbes." },
-    { text: "Human genome has approximately how many protein-coding genes?", options: ["100,000","30,000","20,00025,000","2,000"], correct: 2, solution: "Human genome contains ~20,00025,000 protein-coding genes." },
-    { text: "Which organ produces bile?", options: ["Pancreas","Gall bladder","Liver","Stomach"], correct: 2, solution: "Bile is produced by hepatocytes of the liver; stored in gall bladder." },
-    { text: "Transcription is the synthesis of:", options: ["DNA from DNA","RNA from DNA","Protein from RNA","DNA from RNA"], correct: 1, solution: "Transcription: RNA polymerase synthesises mRNA from DNA template." },
-    { text: "The 'fight or flight' hormone is:", options: ["Insulin","Adrenaline","Thyroxine","Cortisol"], correct: 1, solution: "Adrenaline (epinephrine) from adrenal medulla triggers fight-or-flight response." },
-    { text: "Erythroblastosis fetalis occurs due to:", options: ["ABO incompatibility","Rh incompatibility","Both","Neither"], correct: 1, solution: "Rh incompatibility between Rh mother and Rh+ fetus causes haemolytic disease." },
-    { text: "The protein coat of a virus is called:", options: ["Capsid","Envelope","Nucleic acid","Plasmid"], correct: 0, solution: "Capsid is the protein shell that surrounds a virus's nucleic acid." },
-    { text: "Which type of immunity is provided by antibodies?", options: ["Innate","Cell-mediated","Humoral","Non-specific"], correct: 2, solution: "Humoral immunity: B-cells produce antibodies (immunoglobulins) in blood." },
-    { text: "Spinal cord is enclosed in:", options: ["Skull","Vertebral column","Ribs","Sternum"], correct: 1, solution: "Spinal cord runs through the vertebral (spinal) column for protection." },
-    { text: "ECG records activity of:", options: ["Brain","Muscle","Heart","Kidney"], correct: 2, solution: "Electrocardiogram (ECG) records the electrical activity of the heart." },
-    { text: "Which blood cells lack a nucleus in maturity?", options: ["WBC","RBC","Platelets","Both B and C"], correct: 3, solution: "Mature RBCs and platelets (thrombocytes) lack a nucleus." },
-    { text: "The hormone that regulates calcium levels:", options: ["ADH","PTH","LH","TSH"], correct: 1, solution: "Parathyroid hormone (PTH) raises blood calcium levels." },
-    { text: "Henle's loop is found in:", options: ["Liver","Brain","Kidney","Heart"], correct: 2, solution: "Loop of Henle is part of the nephron in the kidney." },
-    { text: "Corpus luteum secretes:", options: ["Estrogen only","Progesterone","FSH","LH"], correct: 1, solution: "Corpus luteum (ruptured follicle) secretes mainly progesterone." },
-    { text: "Which cells produce antibodies?", options: ["T-lymphocytes","B-lymphocytes","NK cells","Macrophages"], correct: 1, solution: "Activated B-lymphocytes differentiate into plasma cells that secrete antibodies." },
-    { text: "Acrosome reaction occurs in:", options: ["Egg","Sperm","Zygote","Embryo"], correct: 1, solution: "Acrosome (cap) of sperm releases enzymes to penetrate the zona pellucida of the egg." },
-    { text: "Normal blood pressure (adult):", options: ["120/80","80/120","140/90","110/70"], correct: 0, solution: "Normal BP: systolic 120 mmHg / diastolic 80 mmHg." },
-    { text: "Malaria is caused by:", options: ["Leishmania","Plasmodium","Trypanosoma","Entamoeba"], correct: 1, solution: "Malaria is caused by Plasmodium species (P. falciparum is most dangerous)." },
-    { text: "Which gland is both exocrine and endocrine?", options: ["Thyroid","Adrenal","Pancreas","Pituitary"], correct: 2, solution: "Pancreas: exocrine (digestive enzymes via duct) + endocrine (insulin/glucagon)." },
-    { text: "The contractile proteins in muscle fibre:", options: ["Collagen & elastin","Actin & myosin","Keratin & tubulin","Fibrin & fibrinogen"], correct: 1, solution: "Actin (thin) and myosin (thick) filaments generate muscle contraction." },
-    { text: "Which connects muscle to bone?", options: ["Ligament","Cartilage","Tendon","Fascia"], correct: 2, solution: "Tendons (fibrous connective tissue) attach muscle to bone." },
-    { text: "Zona pellucida is the layer surrounding:", options: ["Ovary","Uterus","Oocyte","Embryo"], correct: 2, solution: "Zona pellucida is the glycoprotein coat around the oocyte/early embryo." },
-    { text: "PCR (Polymerase Chain Reaction) was invented by:", options: ["Watson","Mullis","Sanger","Boyer"], correct: 1, solution: "Kary Mullis invented PCR in 1983 (Nobel Prize 1993)." },
-    { text: "Dialysis mimics the function of:", options: ["Heart","Liver","Kidney","Lungs"], correct: 2, solution: "Dialysis replaces the filtration/excretory function of failed kidneys." },
-    { text: "Which disease is caused by deficiency of Vitamin B12?", options: ["Scurvy","Rickets","Pernicious anaemia","Pellagra"], correct: 2, solution: "Vitamin B12 deficiency causes pernicious (megaloblastic) anaemia." },
-    { text: "The master gland of endocrine system:", options: ["Thyroid","Adrenal","Pituitary","Hypothalamus"], correct: 2, solution: "Pituitary gland is called the 'master gland'; it controls other endocrine glands." },
-  ];
-
-  const makeQs = (arr, subject) =>
-    arr.map((q, i) => ({
-      id: `${year}-${subject}-${i + 1}`,
-      subject, number: i + 1, year,
-      ...q,
-      // Slightly vary options order by seed for different years
-      options: seed % 2 === 0 ? q.options : q.options
-    }));
-
-  return [
-    ...makeQs(physics, "Physics"),
-    ...makeQs(chemistry, "Chemistry"),
-    ...makeQs(botany, "Botany"),
-    ...makeQs(zoology, "Zoology"),
-  ];
-};
 
 // 
 // UTILS
@@ -336,7 +126,6 @@ async function sbSignOut() {
 }
 
 // Returns { questions, error, source }
-// source = "supabase" | "localStorage" | "local_fallback"
 async function sbFetchQuestions(paperId = "NEET_2025") {
   const configErr = diagnoseConfig();
   if (configErr) return { questions: null, error: configErr, source: null };
@@ -3628,7 +3417,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
                     <div key={i} style={{ ...card(), padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
                       <div style={{ width: 48, height: 48, borderRadius: "50%", background: pct2>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border: "2px solid "+(pct2>=50?"#22c55e":"#ef4444"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: pct2>=50?"#4ade80":"#f87171", fontSize: 13, flexShrink: 0 }}>{pct2}%</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, color: "#c7d2fe", fontSize: "0.9rem" }}>{r.test_name || ("NEET " + r.year + " Mock")}</div>
+                        <div style={{ fontWeight: 600, color: "#c7d2fe", fontSize: "0.9rem" }}>{r.test_name || "Mock Test"}</div>
                         <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{date}{r.paper_id && r.paper_id !== "NEET_2025" ? <span style={{ marginLeft: 8, color: "#475569" }}>{r.paper_id}</span> : ""}</div>
                         <div style={{ marginTop: 5, background: "rgba(0,0,0,0.3)", borderRadius: 99, height: 4, maxWidth: 200 }}>
                           <div style={{ height: "100%", borderRadius: 99, background: pct2>=50?"#22c55e":"#ef4444", width: Math.max(0,pct2)+"%" }} />
@@ -3699,7 +3488,7 @@ function InstructionsScreen({ year, onBegin, onBack, branding = {} }) {
       <div style={{ maxWidth: 780, width: "100%" }}>
         <div style={{ ...card(), overflow: "hidden" }}>
           <div style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", padding: "22px 30px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <h2 style={{ color: "#e2e8f0", margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>General Instructions  NEET {year}</h2>
+            <h2 style={{ color: "#e2e8f0", margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>General Instructions</h2>
             <p style={{ color: "#818cf8", margin: "4px 0 0", fontSize: 14 }}>Read carefully before starting.</p>
           </div>
           <div style={{ padding: "26px 30px", color: "#cbd5e1", lineHeight: 1.8 }}>
@@ -4111,7 +3900,7 @@ function ExamScreen({ questions, year, onFinish, settings, examWindowEnd, examWi
       
       <div style={{ background: "#0f172a", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 12 }}>
         <div>
-          <span style={{ color: "#818cf8", fontWeight: 700, fontSize: "1rem" }}>NEET {year}</span>
+          <span style={{ color: "#818cf8", fontWeight: 700, fontSize: "1rem" }}>NEET UG Mock Test</span>
           <span style={{ color: "#475569", fontSize: 12, marginLeft: 10 }}>Mock Examination</span>
         </div>
        
@@ -4417,7 +4206,7 @@ function ResultScreen({ questions, answers, year, user, meta, onDashboard, onSig
         "</div>";
     }).join("");
 
-    const pdfTitle = meta?.testName || ("NEET " + year + " Mock Test");
+    const pdfTitle = meta?.testName || "Mock Test Report";
     win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title><style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
@@ -4819,7 +4608,7 @@ function subjectColors(i) {
 export default function App() {
   const [screen,       setScreen]       = useState(SCREEN.LANDING);
   const [user,         setUser]         = useState(null);
-  const [year,         setYear]         = useState(2024);
+  const year = 2025; // fixed - no year selector
   const [questions,    setQuestions]    = useState([]);
   const [finalAnswers, setFinalAnswers] = useState({});
   const [finalMeta,    setFinalMeta]    = useState({});   // time_per_q, subject_times, bookmarks
@@ -4902,7 +4691,6 @@ export default function App() {
         // Validate question IDs match
         if (!s.questionIds || s.questionIds.length !== qs.length) return false;
         setQuestions(qs);
-        setYear(s.year || 2025);
         setScreen(SCREEN.EXAM);
         return true;
       } catch { return false; }
@@ -4972,7 +4760,6 @@ export default function App() {
     setExamWindowEnd(testMeta?.exam_window_end || null);
     setExamWindowStart(testMeta?.exam_window_start || null);
     setDisableSubmit(testMeta?.disable_submit === true);
-    setYear(2025);
     setLoadingQ(true);
     setLoadingError(null);
 
@@ -5045,7 +4832,7 @@ export default function App() {
     }
 
     const studentName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
-    if (meta) meta.testName = activeTest?.test_name || ("NEET " + year + " Mock Test");
+    if (meta) meta.testName = activeTest?.test_name || "NEET Mock Test";
     const payload = {
       year, score, correct, wrong, unattempted,
       total: questions.length, percentile,
@@ -5077,8 +4864,7 @@ export default function App() {
     if (isSupabaseConfigured() && user) {
       // Only send columns that exist in the test_results table
       const safePayload = {
-        year:              payload.year,
-        score:             payload.score,
+          score:             payload.score,
         correct:           payload.correct,
         wrong:             payload.wrong,
         unattempted:       payload.unattempted,
@@ -5205,17 +4991,7 @@ export default function App() {
             >
                Retry
             </button>
-            <button
-              onClick={() => {
-                setLoadingError(null);
-                setYear(2025);
-                setQuestions(buildLocalQuestions(2025));
-                setScreen(SCREEN.INSTRUCTIONS);
-              }}
-              style={{ background: "rgba(255,255,255,0.07)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "11px 24px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
-            >
-               Use Demo Questions Instead
-            </button>
+
             <button
               onClick={() => setLoadingError(null)}
               style={{ background: "transparent", color: "#64748b", border: "none", borderRadius: 10, padding: "11px 16px", cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit" }}
