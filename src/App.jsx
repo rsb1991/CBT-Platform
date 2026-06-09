@@ -260,8 +260,15 @@ function LandingScreen({ onStudent, onAdmin, branding = {} }) {
     ? { backgroundImage: "url(" + branding.bg_image_data + ")", backgroundSize: "cover", backgroundPosition: "center" }
     : { background: "linear-gradient(135deg," + (branding.bg_gradient_from || "#0f0c29") + " 0%," + (branding.bg_gradient_to || "#302b63") + " 50%," + (branding.bg_gradient_from || "#24243e") + " 100%)" };
 
+  // Also apply to body so there's no white gap on any screen size
+  React.useEffect(() => {
+    const bg = bgStyle.background || bgStyle.backgroundImage || "";
+    if (bg) document.body.style.background = bg;
+    return () => { document.body.style.background = ""; };
+  }, [branding]);
+
   return (
-    <div style={{ minHeight: "100vh", ...bgStyle, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem" }}>
+    <div style={{ minHeight: "100vh", width: "100%", ...bgStyle, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Crimson Pro', Georgia, serif", padding: "1.5rem" }}>
       <div style={{ width: "100%", maxWidth: 460, textAlign: "center" }}>
         {/* Logo */}
         {(branding.logo_data || branding.logo_url) && (
@@ -4469,9 +4476,10 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
       const marks  = isC ? "+4" : isW ? "-1" : "0";
       const color  = isC ? "#16a34a" : isW ? "#dc2626" : "#6b7280";
       const optRows = ["a","b","c","d"].map((lt, i) => {
-        const optText = q["option_" + lt] || "";
-        const optImg  = q["option_" + lt + "_image"] || "";
-        const isAns   = ua === i;
+        // Questions use q.options[] array (from sbFetchQuestions mapping) - fall back to q.option_a etc.
+        const optText = (Array.isArray(q.options) && q.options[i] != null) ? q.options[i] : (q["option_" + lt] || "");
+        const optImages = Array.isArray(q.option_images) ? q.option_images : [];
+        const optImg  = optImages[i] || q["option_" + lt + "_image"] || "";
         const isRight = q.correct === i;
         let bg = "transparent";
         if (isRight) bg = "#dcfce7";
@@ -5293,8 +5301,10 @@ export default function App() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap');
-        *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+      *, *::before, *::after { box-sizing: border-box; }
+      html { height: 100%; }
+      body { margin: 0; min-height: 100%; -webkit-tap-highlight-color: transparent; touch-action: manipulation; background: #070d1a; }
+      #root { min-height: 100vh; width: 100%; display: flex; flex-direction: column; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
