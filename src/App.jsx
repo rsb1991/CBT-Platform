@@ -1203,6 +1203,7 @@ function AdminScreen({ onSignOut }) {
       "@media print{.noprint{display:none}}</style></head><body>" +
       "<h1>Student Analytics Report - " + pid + "</h1>" +
       "<p style='color:#6b7280;font-size:13px'>Generated " + new Date().toLocaleString("en-IN") + " &nbsp;|&nbsp; " + analyticsData.total + " attempt(s) &nbsp;|&nbsp; " + byStudent.length + " student(s)</p>" +
+      "<div class='noprint' style='margin:8px 0 20px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "<div style='margin:16px 0 24px'>" +
       "<div class='stat'><div class='big'>" + byStudent.length + "</div><div class='lbl'>Students</div></div>" +
       "<div class='stat'><div class='big'>" + analyticsData.total + "</div><div class='lbl'>Total Attempts</div></div>" +
@@ -1213,7 +1214,6 @@ function AdminScreen({ onSignOut }) {
       "</div>" +
       "<table><thead><tr><th>#</th><th>Student</th><th>Attempts</th><th>Latest</th><th>Average</th><th>Best</th><th>Lowest</th><th>Avg%</th></tr></thead>" +
       "<tbody>" + rows + "</tbody></table>" +
-      "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "</body></html>");
     win.document.close();
   };
@@ -1364,6 +1364,7 @@ function AdminScreen({ onSignOut }) {
       "</style></head><body>" +
       "<h1>" + student.name + " - Exam Report</h1>" +
       "<p style='color:#6b7280;font-size:13px'>Paper: " + (result.paper_id||paperFilter||"") + " &nbsp;|&nbsp; Test: " + (result.test_name||"Mock Test") + " &nbsp;|&nbsp; Date: " + new Date(result.created_at).toLocaleDateString("en-IN") + " &nbsp;|&nbsp; Generated: " + new Date().toLocaleString("en-IN") + "</p>" +
+      "<div class='noprint' style='margin:8px 0 20px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "<div style='margin:16px 0'>" +
       "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / " + totalMarks + "</div></div>" +
       "<div class='stat'><div class='big'>" + pct + "%</div><div class='lbl'>Percentage</div></div>" +
@@ -1386,7 +1387,6 @@ function AdminScreen({ onSignOut }) {
       "<h2>All Questions with Solutions</h2>" +
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green = correct &nbsp;|&nbsp; Red = wrong &nbsp;|&nbsp; Gray = unattempted</p>" +
       qRows +
-      "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "</body></html>");
     win.document.close();
   };
@@ -4749,6 +4749,7 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
       "</style></head><body>" +
       "<h1>" + pdfTitle + " - Report</h1>" +
       "<p style='color:#6b7280;font-size:13px'>Generated on " + new Date().toLocaleString("en-IN") + "</p>" +
+      "<div class='noprint' style='margin:8px 0 20px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "<div style='margin:16px 0'>" +
       "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / 720</div></div>" +
       "<div class='stat'><div class='big'>" + pct + "%</div><div class='lbl'>Percentage</div></div>" +
@@ -4763,7 +4764,6 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
       "<h2>All Questions with Solutions</h2>" +
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green border = correct &nbsp;|&nbsp; Red border = wrong &nbsp;|&nbsp; Gray border = unattempted</p>" +
       qRows +
-      "<div class='noprint' style='text-align:center;margin-top:30px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "</body></html>");
     win.document.close();
   };
