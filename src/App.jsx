@@ -452,6 +452,11 @@ function AdminScreen({ onSignOut }) {
   const [csvMsg,    setCsvMsg]    = useState(null);
   const [csvPreview,setCsvPreview]= useState([]);
   const [csvLoading,setCsvLoading]= useState(false);
+  const [scanMsg,      setScanMsg]      = useState(null);
+  const [scanLoading,  setScanLoading]  = useState(false);
+  const [scanPreview,  setScanPreview]  = useState([]);
+  const [scanProgress, setScanProgress] = useState("");
+  const [scanImages,   setScanImages]   = useState([]); // {name, b64, type}
   const [imgBulkMsg,     setImgBulkMsg]     = useState(null);
   const [imgBulkFiles,   setImgBulkFiles]   = useState([]);
   const [imgBulkLoading, setImgBulkLoading] = useState(false);
@@ -1547,7 +1552,7 @@ function AdminScreen({ onSignOut }) {
       <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-          {[["add","Add Question"],["csv","CSV Upload"],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"],["analytics","Analytics"],["branding","Branding"]].map(([t,l]) => (
+          {[["add","Add Question"],["csv","CSV Upload"],["scan","Scan Paper "],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"],["analytics","Analytics"],["branding","Branding"]].map(([t,l]) => (
             <button key={t} onClick={() => setTab(t)} style={abtn(tab===t?"primary":"ghost")}>{l + (t==="list" ? " (" + questions.length + ")" : "")}</button>
           ))}
         </div>
@@ -1825,6 +1830,227 @@ function AdminScreen({ onSignOut }) {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/*  SCAN PAPER TAB  */}
+        {tab === "scan" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+            {scanMsg && <div style={mstyle(scanMsg)}>{scanMsg.text}</div>}
+
+            {/* Instructions */}
+            <div style={{ ...acard, padding:"18px 20px" }}>
+              <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:8, fontSize:"0.95rem" }}>AI Question Paper Scanner</div>
+              <p style={{ color:"#94a3b8", fontSize:13, lineHeight:1.75, margin:"0 0 12px" }}>
+                Upload photos or scans of your question paper. Claude will automatically extract all questions, options, correct answers and solutions.
+                Supports JPG, PNG, WebP images and PDFs.
+              </p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
+                {[["Printed question papers","Handwritten papers (clear handwriting)"],["Multi-page papers (upload all pages)","Hindi + English mixed papers"],["Papers with diagrams/images","MCQ format questions"]].map(([a,b],i) => (
+                  <div key={i}>
+                    <div style={{ color:"#4ade80" }}>{"+ " + a}</div>
+                    <div style={{ color:"#4ade80" }}>{"+ " + b}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Upload area */}
+            <div>
+              <div
+                onClick={() => { const inp=document.createElement("input"); inp.type="file"; inp.accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"; inp.multiple=true; inp.onchange=async e => { const files=Array.from(e.target.files); const imgs=[]; for(const f of files){ const b64=await new Promise(res=>{ const r=new FileReader(); r.onload=ev=>res(ev.target.result.split(",")[1]); r.readAsDataURL(f); }); imgs.push({ name:f.name, b64, type:f.type }); } setScanImages(imgs); setScanMsg({ type:"success", text:imgs.length+" file(s) loaded. Click Extract Questions below." }); setScanPreview([]); }; inp.click(); }}
+                onDragOver={e=>e.preventDefault()}
+                onDrop={async e=>{ e.preventDefault(); const files=Array.from(e.dataTransfer.files).filter(f=>f.type.match(/image|pdf/)); const imgs=[]; for(const f of files){ const b64=await new Promise(res=>{ const r=new FileReader(); r.onload=ev=>res(ev.target.result.split(",")[1]); r.readAsDataURL(f); }); imgs.push({ name:f.name, b64, type:f.type }); } setScanImages(imgs); setScanMsg({ type:"success", text:imgs.length+" file(s) loaded. Click Extract Questions below." }); setScanPreview([]); }}
+                style={{ border:"2px dashed rgba(99,102,241,0.4)", borderRadius:14, padding:32, textAlign:"center", cursor:"pointer", background:"rgba(99,102,241,0.04)", transition:"border-color 0.2s" }}>
+                <div style={{ fontSize:42, marginBottom:10 }}>&#128247;</div>
+                <div style={{ color:"#94a3b8", fontSize:15, marginBottom:6 }}>Click or drag question paper images/PDFs here</div>
+                <div style={{ color:"#475569", fontSize:12 }}>Upload multiple pages at once &bull; JPG, PNG, WebP, PDF</div>
+              </div>
+
+              {/* Image previews */}
+              {scanImages.length > 0 && (
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:12 }}>
+                  {scanImages.map((img,i) => (
+                    <div key={i} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(99,102,241,0.3)", borderRadius:8, padding:"6px 10px", fontSize:12, color:"#a5b4fc", display:"flex", alignItems:"center", gap:6 }}>
+                      <span>&#128196;</span> {img.name}
+                      <button onClick={()=>setScanImages(p=>p.filter((_,j)=>j!==i))} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:14, padding:0, marginLeft:4 }}>x</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Paper ID input */}
+            <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+              <div style={{ flex:1, minWidth:180 }}>
+                <label style={alabel}>Paper ID for extracted questions</label>
+                <input value={paperFilter} onChange={e=>setPaperFilter(e.target.value)} placeholder="e.g. PAPER_01" style={ainput} />
+              </div>
+              <div style={{ flex:1, minWidth:180 }}>
+                <label style={alabel}>Subject (leave blank to auto-detect)</label>
+                <select value={form.subject} onChange={e=>ff("subject",e.target.value)} style={{ ...ainput, cursor:"pointer" }}>
+                  <option value="">Auto-detect</option>
+                  {SUBJECTS.map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Extract button */}
+            <button
+              disabled={scanLoading || scanImages.length===0}
+              onClick={async () => {
+                if (!scanImages.length) { setScanMsg({ type:"error", text:"Upload at least one image first." }); return; }
+                setScanLoading(true); setScanPreview([]); setScanProgress("Sending to Claude AI...");
+                setScanMsg({ type:"info", text:"Extracting questions using AI... this may take 20-40 seconds." });
+
+                const subjectHint = form.subject ? "All questions are from the subject: " + form.subject + "." : "Auto-detect the subject (Physics/Chemistry/Botany/Zoology) for each question.";
+                const pid = paperFilter || "PAPER_01";
+
+                // Build content array with all images
+                const content = [
+                  ...scanImages.map(img => ({
+                    type: "image",
+                    source: { type:"base64", media_type: img.type === "application/pdf" ? "image/jpeg" : img.type, data: img.b64 }
+                  })),
+                  {
+                    type: "text",
+                    text: `Extract ALL multiple choice questions from this question paper image(s).
+${subjectHint}
+
+Return ONLY a valid JSON array. No markdown. No explanation. Start with [ and end with ].
+
+Each question object:
+{"number":1,"subject":"Physics","question_text":"Full question text here","equation":"LaTeX if any, else empty string","option_a":"Option A text","option_b":"Option B text","option_c":"Option C text","option_d":"Option D text","correct":0,"solution_text":"Explanation if visible, else empty","paper_id":"${pid}"}
+
+Rules:
+- correct: 0=A, 1=B, 2=C, 3=D (integer)
+- Extract EVERY question visible, even if answer key is not shown (use 0 as default)
+- Preserve exact text including chemical formulas, numbers, units
+- Convert visible LaTeX/equations to the equation field using LaTeX syntax
+- If answer key is visible at the bottom, match answers to questions
+- number: sequential integer starting from 1
+- paper_id: always "${pid}"
+- Output ONLY the JSON array, nothing else`
+                  }
+                ];
+
+                try {
+                  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+                    method:"POST",
+                    headers:{ "Content-Type":"application/json" },
+                    body: JSON.stringify({
+                      model: "claude-sonnet-4-20250514",
+                      max_tokens: 8000,
+                      messages: [{ role:"user", content }]
+                    })
+                  });
+                  const data = await resp.json();
+                  if (data.error) throw new Error(data.error.message);
+                  const raw = data.content?.[0]?.text || "";
+
+                  // Extract JSON array
+                  const start = raw.indexOf("[");
+                  const end   = raw.lastIndexOf("]");
+                  if (start===-1||end===-1) throw new Error("No JSON array in response. Got: " + raw.slice(0,300));
+                  const questions = JSON.parse(raw.slice(start, end+1));
+
+                  if (!Array.isArray(questions) || !questions.length) throw new Error("No questions extracted. Try a clearer image.");
+
+                  setScanPreview(questions);
+                  setScanMsg({ type:"success", text: questions.length + " questions extracted! Review below and click Upload to save." });
+                  setScanProgress("");
+                } catch(err) {
+                  setScanMsg({ type:"error", text:"Extraction failed: " + err.message });
+                  setScanProgress("");
+                } finally {
+                  setScanLoading(false);
+                }
+              }}
+              style={{ ...abtn(scanImages.length>0&&!scanLoading?"primary":"ghost"), padding:"13px", fontSize:"1rem", opacity:scanLoading||scanImages.length===0?0.5:1 }}>
+              {scanLoading ? ("Extracting... " + scanProgress) : "Extract Questions with AI"}
+            </button>
+
+            {/* Preview extracted questions */}
+            {scanPreview.length > 0 && (
+              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"0.95rem" }}>
+                  {"Preview - " + scanPreview.length + " Questions Extracted"}
+                  <span style={{ color:"#64748b", fontSize:12, fontWeight:400, marginLeft:10 }}>Review before uploading</span>
+                </div>
+
+                {/* Editable question list */}
+                <div style={{ display:"flex", flexDirection:"column", gap:10, maxHeight:500, overflowY:"auto" }}>
+                  {scanPreview.map((q,i) => (
+                    <div key={i} style={{ ...acard, padding:"14px 16px" }}>
+                      <div style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:10 }}>
+                        <div style={{ color:"#818cf8", fontWeight:700, fontSize:13, flexShrink:0, marginTop:2 }}>Q{q.number}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ color:"#e2e8f0", fontSize:13, lineHeight:1.6, marginBottom:6 }}>{q.question_text}</div>
+                          {q.equation && <div style={{ color:"#fbbf24", fontSize:12, fontFamily:"monospace", marginBottom:6 }}>{q.equation}</div>}
+                          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                            {["option_a","option_b","option_c","option_d"].map((opt,oi) => (
+                              <span key={opt} style={{ fontSize:11, padding:"2px 8px", borderRadius:5, background:oi===q.correct?"rgba(34,197,94,0.12)":"rgba(255,255,255,0.04)", color:oi===q.correct?"#4ade80":"#64748b", border:oi===q.correct?"1px solid rgba(34,197,94,0.3)":"1px solid rgba(255,255,255,0.06)" }}>
+                                {["A","B","C","D"][oi]}) {(q[opt]||"").slice(0,30)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
+                          <span style={{ fontSize:10, color:"#94a3b8", background:"rgba(255,255,255,0.06)", borderRadius:4, padding:"2px 7px" }}>{q.subject||"?"}</span>
+                          <button onClick={()=>setScanPreview(p=>p.filter((_,j)=>j!==i))} style={{ ...abtn("danger"), fontSize:10, padding:"3px 8px" }}>Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Upload buttons */}
+                <div style={{ display:"flex", gap:12 }}>
+                  <button
+                    onClick={async () => {
+                      setScanLoading(true);
+                      setScanMsg({ type:"info", text:"Uploading to Supabase..." });
+                      let done=0, fail=0;
+                      for (let i=0; i<scanPreview.length; i+=50) {
+                        const chunk = scanPreview.slice(i,i+50).map(q => ({
+                          number:        q.number || i+1,
+                          subject:       q.subject || "Physics",
+                          type:          q.equation ? "equation" : "text",
+                          question_text: q.question_text || "",
+                          equation:      q.equation || "",
+                          diagram_data:  "",
+                          diagram_url:   "",
+                          option_a:      q.option_a || "",
+                          option_b:      q.option_b || "",
+                          option_c:      q.option_c || "",
+                          option_d:      q.option_d || "",
+                          option_a_image:"", option_b_image:"", option_c_image:"", option_d_image:"",
+                          correct:       typeof q.correct==="number" ? q.correct : 0,
+                          solution_text: q.solution_text || "",
+                          solution_eq:   "",
+                          solution_diagram_data:"",
+                          paper_id:      q.paper_id || paperFilter || "PAPER_01",
+                          chapter:       q.chapter || "",
+                          difficulty:    q.difficulty || "medium",
+                        }));
+                        const { error } = await supabase.from("questions").insert(chunk);
+                        if (error) { fail+=chunk.length; console.error(error); }
+                        else done+=chunk.length;
+                        setScanMsg({ type:"info", text:"Uploading... " + (done+fail) + "/" + scanPreview.length });
+                      }
+                      setScanLoading(false);
+                      if (fail>0) setScanMsg({ type:"error", text:done+" uploaded, "+fail+" failed. Check for duplicate question numbers." });
+                      else { setScanMsg({ type:"success", text:done+" questions uploaded successfully to paper: " + (paperFilter||"PAPER_01") }); setScanPreview([]); setScanImages([]); }
+                    }}
+                    disabled={scanLoading}
+                    style={{ ...abtn("success"), flex:1, padding:"12px", fontSize:"1rem", opacity:scanLoading?0.6:1 }}>
+                    {scanLoading ? "Uploading..." : "Upload " + scanPreview.length + " Questions to Supabase"}
+                  </button>
+                  <button onClick={()=>{ setScanPreview([]); setScanMsg(null); }} style={abtn("ghost")}>Clear</button>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
