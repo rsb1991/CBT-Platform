@@ -1908,11 +1908,10 @@ function AdminScreen({ onSignOut }) {
 
                 // Build content array with all images
                 const content = [
-                  ...scanImages.map(img => (
-                    img.type === "application/pdf"
-                      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: img.b64 } }
-                      : { type: "image", source: { type: "base64", media_type: img.type, data: img.b64 } }
-                  )),
+                  ...scanImages.map(img => ({
+                    type: "image",
+                    source: { type:"base64", media_type: img.type === "application/pdf" ? "image/jpeg" : img.type, data: img.b64 }
+                  })),
                   {
                     type: "text",
                     text: `Extract ALL multiple choice questions from this question paper image(s).
@@ -1936,12 +1935,12 @@ Rules:
                 ];
 
                 try {
-                  const resp = await fetch("/api/extract", {
+                  const resp = await fetch("https://api.anthropic.com/v1/messages", {
                     method:"POST",
                     headers:{ "Content-Type":"application/json" },
                     body: JSON.stringify({
-                      model: "claude-sonnet-4-6",
-                      max_tokens: 16000,
+                      model: "claude-sonnet-4-20250514",
+                      max_tokens: 8000,
                       messages: [{ role:"user", content }]
                     })
                   });
@@ -5418,6 +5417,53 @@ export default function App() {
         if (meta) meta.saveError = saveErr;
       }
     }
+
+    // Email the report to the fixed admin address (configurable via platform_settings -> report_email)
+    try {
+      const reportEmail = (settings && settings.report_email) ? settings.report_email.trim() : "";
+      if (reportEmail) {
+        const subjRows = ["Physics","Chemistry","Botany","Zoology"].map(sub => {
+          const sq = questions.filter(q => q.subject === sub);
+          if (!sq.length) return "";
+          const c = sq.filter(q => ans[q.id] === q.correct).length;
+          const w = sq.filter(q => ans[q.id] !== undefined && ans[q.id] !== q.correct).length;
+          const u = sq.filter(q => ans[q.id] === undefined).length;
+          return "<tr><td style='padding:6px 10px;border-bottom:1px solid #eee'>" + sub + "</td>" +
+                 "<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#16a34a'>" + c + "</td>" +
+                 "<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#dc2626'>" + w + "</td>" +
+                 "<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#6b7280'>" + u + "</td>" +
+                 "<td style='padding:6px 10px;border-bottom:1px solid #eee'><b>" + (c*4 + w*(-1)) + "</b></td></tr>";
+        }).join("");
+        const pctVal = questions.length ? Math.round((correct / questions.length) * 100) : 0;
+        const html =
+          "<div style='font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#111'>" +
+          "<h2 style='color:#312e81'>" + (payload.test_name || "Mock Test") + " - Student Report</h2>" +
+          "<p><b>Student:</b> " + (payload.student_name || "Student") + " &nbsp; | &nbsp; <b>Email:</b> " + (payload.student_email || "-") + "</p>" +
+          "<p><b>Paper ID:</b> " + (payload.paper_id || "-") + " &nbsp; | &nbsp; <b>Submitted:</b> " + new Date().toLocaleString("en-IN") + "</p>" +
+          "<table style='border-collapse:collapse;margin:14px 0'>" +
+          "<tr><td style='padding:8px 16px;background:#f3f4f6;border-radius:8px'><b>Score:</b> " + score + " / 720</td>" +
+          "<td style='padding:8px 16px;background:#f3f4f6;border-radius:8px'><b>Percentage:</b> " + pctVal + "%</td></tr></table>" +
+          "<p><b>Correct:</b> " + correct + " &nbsp; <b>Wrong:</b> " + wrong + " &nbsp; <b>Unattempted:</b> " + unattempted +
+          (percentile != null ? " &nbsp; <b>Percentile:</b> " + percentile + "%" : "") + "</p>" +
+          "<h3 style='color:#312e81;margin-top:20px'>Subject-wise Performance</h3>" +
+          "<table style='width:100%;border-collapse:collapse;font-size:14px'>" +
+          "<tr style='background:#312e81;color:#fff'><th style='padding:8px 10px;text-align:left'>Subject</th>" +
+          "<th style='padding:8px 10px;text-align:left'>Correct</th><th style='padding:8px 10px;text-align:left'>Wrong</th>" +
+          "<th style='padding:8px 10px;text-align:left'>Unatt.</th><th style='padding:8px 10px;text-align:left'>Score</th></tr>" +
+          subjRows + "</table>" +
+          "<p style='margin-top:18px;color:#6b7280;font-size:13px'>The full detailed report with all questions and solutions is available for the student to download from their dashboard.</p>" +
+          "</div>";
+        fetch("/api/send-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: reportEmail,
+            subject: "Test Report - " + (payload.student_name || "Student") + " - " + (payload.test_name || "Mock Test"),
+            html,
+          }),
+        }).catch(() => {});
+      }
+    } catch (_) {}
 
     setScreen(SCREEN.RESULT);
   };
