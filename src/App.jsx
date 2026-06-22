@@ -3361,8 +3361,9 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
 
   // Compute exam window status
   const getWindowStatus = () => {
-    const start = settings?.exam_window_start ? new Date(settings.exam_window_start) : null;
-    const end   = settings?.exam_window_end   ? new Date(settings.exam_window_end)   : null;
+    // Use effective settings (batch test overrides global)
+    const start = eff?.exam_window_start ? new Date(eff.exam_window_start) : null;
+    const end   = eff?.exam_window_end   ? new Date(eff.exam_window_end)   : null;
     const now   = new Date();
     if (!start || !end || isNaN(start) || isNaN(end)) return null;
     if (now < start) return { phase: "upcoming", diff: start - now, label: "Exam opens in", end };
@@ -3561,8 +3562,8 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
           )}
           {/* Window times */}
           <div style={{ fontSize: 11, color: "#475569", textAlign: "right" }}>
-            <div>Opens: {settings.exam_window_start ? new Date(settings.exam_window_start).toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</div>
-            <div>Closes: {settings.exam_window_end ? new Date(settings.exam_window_end).toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</div>
+            <div>Opens: {eff?.exam_window_start ? new Date(eff.exam_window_start).toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</div>
+            <div>Closes: {eff?.exam_window_end ? new Date(eff.exam_window_end).toLocaleString("en-IN", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</div>
           </div>
         </div>
       )}
@@ -3689,7 +3690,10 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
 
             <button onClick={handleStart} disabled={!canStart}
               style={{ ...btn(canStart ? "success" : "ghost", { padding: "13px 0", fontSize: "1rem", width: "100%", borderRadius: 12 }), opacity: canStart ? 1 : 0.4, cursor: canStart ? "pointer" : "not-allowed" }}>
-              {isWindowBlocked ? (winStatus?.phase === "upcoming" ? "Exam Not Started Yet" : "Exam Window Closed") : "Begin Mock Test"}
+              {limitReached ? "Attempt Limit Reached"
+                : isWindowBlocked
+                  ? (winStatus?.phase === "upcoming" ? "Exam Not Started Yet" : "Exam Window Closed")
+                  : "Begin Mock Test"}
             </button>
           </div>
         )}
@@ -4455,7 +4459,10 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
   // PDF download
   const downloadPDF = () => {
     const win = window.open("", "_blank");
-    if (!win) return;
+    if (!win) {
+      alert("PDF blocked by your browser.\n\nTo fix: click the popup blocked icon in your address bar and allow popups from this site, then click Download PDF again.");
+      return;
+    }
     const OPTS = ["A","B","C","D"];
     // Subject-wise summary
     const subjSummary = ["Physics","Chemistry","Botany","Zoology"].map(s => {
@@ -4480,6 +4487,7 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
         const optText = (Array.isArray(q.options) && q.options[i] != null) ? q.options[i] : (q["option_" + lt] || "");
         const optImages = Array.isArray(q.option_images) ? q.option_images : [];
         const optImg  = optImages[i] || q["option_" + lt + "_image"] || "";
+        const isAns   = ua === i;
         const isRight = q.correct === i;
         let bg = "transparent";
         if (isRight) bg = "#dcfce7";
