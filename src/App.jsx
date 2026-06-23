@@ -451,6 +451,169 @@ function RemoveFromBatchesPanel({ supabase, abtn, ainput }) {
   );
 }
 
+// INLINE EDITABLE QUESTION CARD - always editable, full width, with image uploads
+function InlineQuestionCard({ q, supabase, onSaved, onDeleted }) {
+  const [d, setD] = useState({
+    number: String(q.number ?? ""),
+    subject: q.subject || "Physics",
+    question_text: q.question_text || "",
+    equation: q.equation || "",
+    diagram_data: q.diagram_data || "",
+    option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "",
+    option_a_image: q.option_a_image || "", option_b_image: q.option_b_image || "", option_c_image: q.option_c_image || "", option_d_image: q.option_d_image || "",
+    correct: String(q.correct ?? "0"),
+    solution_text: q.solution_text || "",
+    solution_eq: q.solution_eq || "",
+    solution_diagram_data: q.solution_diagram_data || "",
+    paper_id: q.paper_id || "PAPER_01",
+    chapter: q.chapter || "",
+    difficulty: q.difficulty || "medium",
+  });
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+
+  const pickImage = (key) => {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/jpeg,image/jpg,image/png,image/webp";
+    inp.onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      setNote({ ok: true, text: "Compressing..." });
+      try { const { b64 } = await compressToBase64(f); set(key, b64); setNote({ ok: true, text: "Image ready" }); }
+      catch (ex) { setNote({ ok: false, text: ex.message }); }
+    };
+    inp.click();
+  };
+
+  const save = async () => {
+    if (!d.number || isNaN(+d.number)) return setNote({ ok: false, text: "Question number required." });
+    if (!d.question_text.trim() && !d.equation.trim() && !d.diagram_data) return setNote({ ok: false, text: "Question text, equation, or diagram required." });
+    if (!d.option_a && !d.option_a_image) return setNote({ ok: false, text: "Option A required." });
+    setBusy(true);
+    const payload = {
+      number: +d.number, subject: d.subject,
+      type: d.diagram_data && d.equation ? "equation+diagram" : d.diagram_data ? "diagram" : d.equation ? "equation" : "text",
+      question_text: d.question_text, equation: d.equation,
+      diagram_data: d.diagram_data, diagram_url: "",
+      option_a: d.option_a, option_b: d.option_b, option_c: d.option_c, option_d: d.option_d,
+      option_a_image: d.option_a_image || "", option_b_image: d.option_b_image || "", option_c_image: d.option_c_image || "", option_d_image: d.option_d_image || "",
+      correct: +d.correct, solution_text: d.solution_text, solution_eq: d.solution_eq,
+      solution_diagram_data: d.solution_diagram_data || "",
+      paper_id: d.paper_id || "PAPER_01", chapter: d.chapter || "", difficulty: d.difficulty || "medium",
+    };
+    const { error } = await supabase.from("questions").update(payload).eq("id", q.id);
+    setBusy(false);
+    if (error) setNote({ ok: false, text: error.message });
+    else { setNote({ ok: true, text: "Saved!" }); if (onSaved) onSaved(); setTimeout(() => setNote(null), 2500); }
+  };
+
+  const del = async () => {
+    if (!window.confirm("Delete this question?")) return;
+    const { error } = await supabase.from("questions").delete().eq("id", q.id);
+    if (error) setNote({ ok: false, text: error.message });
+    else if (onDeleted) onDeleted();
+  };
+
+  const imgBox = (key, label) => (
+    <div style={{ marginBottom: 10 }}>
+      <label style={alabel}>{label}</label>
+      {d[key] ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: "8px 10px" }}>
+          <img src={d[key]} alt="" style={{ maxHeight: 80, maxWidth: 180, objectFit: "contain", borderRadius: 4 }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <button onClick={() => pickImage(key)} style={{ ...abtn("primary"), fontSize: 11, padding: "4px 12px" }}>Replace</button>
+            <button onClick={() => set(key, "")} style={{ ...abtn("danger"), fontSize: 11, padding: "4px 12px" }}>Remove</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => pickImage(key)} style={{ ...abtn("ghost"), fontSize: 12, padding: "8px 14px" }}>+ Add Image</button>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ ...acard, padding: "16px 18px" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: SUBJ_COLORS_A[d.subject] || "#818cf8" }}>{"Q" + d.number + " - " + d.subject}</span>
+        <span style={{ flex: 1 }} />
+        {note && <span style={{ fontSize: 12, color: note.ok ? "#4ade80" : "#f87171" }}>{note.text}</span>}
+        <button onClick={save} disabled={busy} style={{ ...abtn("success"), padding: "6px 16px", fontSize: 13, opacity: busy ? 0.6 : 1 }}>{busy ? "Saving..." : "Save"}</button>
+        <button onClick={del} style={{ ...abtn("danger"), padding: "6px 14px", fontSize: 13 }}>Delete</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={alabel}>Q Number</label>
+          <input type="number" min="1" value={d.number} onChange={e => set("number", e.target.value)} style={ainput} />
+        </div>
+        <div>
+          <label style={alabel}>Subject</label>
+          <select value={d.subject} onChange={e => set("subject", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
+            {SUBJECTS.map(sub => <option key={sub}>{sub}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={alabel}>Question Text</label>
+        <textarea rows={3} value={d.question_text} onChange={e => set("question_text", e.target.value)} style={{ ...ainput, resize: "vertical", lineHeight: 1.6 }} />
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={alabel}>Equation - LaTeX (optional)</label>
+        <input value={d.equation} onChange={e => set("equation", e.target.value)} placeholder="e.g. $$\\frac{1}{2}mv^2$$" style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
+      </div>
+
+      {imgBox("diagram_data", "Diagram Image (optional)")}
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={alabel}>Options - click letter to mark correct</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {["a","b","c","d"].map((lt, i) => {
+            const ok = String(i) === d.correct;
+            const imgKey = "option_" + lt + "_image";
+            return (
+              <div key={lt} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div onClick={() => set("correct", String(i))}
+                  style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", background: ok ? "#22c55e" : "rgba(255,255,255,0.07)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", border: ok ? "2px solid #4ade80" : "2px solid transparent" }}>
+                  {lt.toUpperCase()}
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <input value={d["option_" + lt]} onChange={e => set("option_" + lt, e.target.value)}
+                    placeholder={"Option " + lt.toUpperCase() + (ok ? " (correct)" : "")}
+                    style={{ ...ainput, borderColor: ok ? "rgba(34,197,94,0.4)" : undefined }} />
+                  {d[imgKey] ? (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: "6px 10px" }}>
+                      <img src={d[imgKey]} alt="" style={{ maxHeight: 50, maxWidth: 140, objectFit: "contain", borderRadius: 4 }} />
+                      <button onClick={() => pickImage(imgKey)} style={{ ...abtn("primary"), fontSize: 10, padding: "3px 10px" }}>Replace</button>
+                      <button onClick={() => set(imgKey, "")} style={{ ...abtn("danger"), fontSize: 10, padding: "3px 10px" }}>Remove</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => pickImage(imgKey)} style={{ ...abtn("ghost"), fontSize: 11, padding: "4px 10px", alignSelf: "flex-start" }}>+ Image for {lt.toUpperCase()}</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ color: "#475569", fontSize: 11, marginTop: 4 }}>{"Correct: Option " + ["A","B","C","D"][+d.correct]}</div>
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={alabel}>Solution</label>
+        <textarea rows={2} value={d.solution_text} onChange={e => set("solution_text", e.target.value)} style={{ ...ainput, resize: "vertical", lineHeight: 1.6 }} />
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={alabel}>Solution Equation - LaTeX (optional)</label>
+        <input value={d.solution_eq} onChange={e => set("solution_eq", e.target.value)} style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
+      </div>
+
+      {imgBox("solution_diagram_data", "Solution Image (optional)")}
+    </div>
+  );
+}
+
 // ADMIN SCREEN - full page with CSV upload and Settings panel
 function AdminScreen({ onSignOut }) {
   const [tab,       setTab]       = useState("add");
@@ -1568,7 +1731,7 @@ function AdminScreen({ onSignOut }) {
         <button onClick={onSignOut} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>Sign Out</button>
       </div>
 
-      <div style={{ maxWidth: (tab === "list" && editId) ? 1500 : 960, margin: "0 auto", padding: 20, transition: "max-width 0.2s" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           {[["add","Add Question"],["csv","CSV Upload"],["scan","Scan Paper "],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"],["analytics","Analytics"],["branding","Branding"]].map(([t,l]) => (
@@ -2109,92 +2272,16 @@ Rules:
             ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No questions found.</div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: editId ? "minmax(420px, 1fr) minmax(380px, 520px)" : "1fr", gap: 16, alignItems: "start" }}>
-                {/* LEFT: full question cards */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {filtered.map(q => {
-                    const selected = editId === q.id;
-                    return (
-                      <div key={q.id} onClick={() => handleEdit(q, true)}
-                        style={{ ...acard, cursor: "pointer", border: selected ? "1px solid #6366f1" : (acard.border || "1px solid rgba(255,255,255,0.07)"), boxShadow: selected ? "0 0 0 1px #6366f1" : "none" }}>
-                        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: SUBJ_COLORS_A[q.subject] || "#818cf8" }}>{"Q" + q.number + " - " + q.subject}</span>
-                          {q.diagram_data && <span style={{ fontSize: 10, color: "#4ade80", background: "rgba(34,197,94,0.1)", padding: "1px 6px", borderRadius: 4 }}>image</span>}
-                          {q.equation    && <span style={{ fontSize: 10, color: "#818cf8", background: "rgba(99,102,241,0.1)", padding: "1px 6px", borderRadius: 4 }}>eq</span>}
-                          <span style={{ flex: 1 }} />
-                          <button onClick={e => { e.stopPropagation(); handleEdit(q, true); }} style={abtn("sm")}>Edit</button>
-                          <button onClick={e => { e.stopPropagation(); handleDelete(q.id); }} style={{ ...abtn("danger"), padding: "5px 12px", fontSize: "0.78rem" }}>Delete</button>
-                        </div>
-                        <QuestionRenderer q={q} showSolution={true} />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* RIGHT: editor side panel (shows when a card is selected) */}
-                {editId && (
-                  <div style={{ position: "sticky", top: 12, alignSelf: "start", ...acard, padding: "16px 18px", maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                      <div style={{ color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>{"Editing Q" + form.number + " - " + form.subject}</div>
-                      <button onClick={() => { setForm(aempty()); setEditId(null); setImgInfo(null); }} style={abtn("sm")}>Close</button>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 10, marginBottom: 12 }}>
-                      <div>
-                        <label style={alabel}>Q Number</label>
-                        <input type="number" min="1" value={form.number} onChange={e => ff("number", e.target.value)} style={ainput} />
-                      </div>
-                      <div>
-                        <label style={alabel}>Subject</label>
-                        <select value={form.subject} onChange={e => ff("subject", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
-                          {SUBJECTS.map(sub => <option key={sub}>{sub}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={alabel}>Question Text</label>
-                      <textarea rows={4} value={form.question_text} onChange={e => ff("question_text", e.target.value)} style={{ ...ainput, resize: "vertical", lineHeight: 1.6 }} />
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={alabel}>Equation - LaTeX (optional)</label>
-                      <input value={form.equation} onChange={e => ff("equation", e.target.value)} style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={alabel}>Options - click letter to mark correct</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {["a","b","c","d"].map((lt, i) => {
-                          const ok = String(i) === form.correct;
-                          return (
-                            <div key={lt} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <div onClick={() => ff("correct", String(i))}
-                                style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: ok ? "#22c55e" : "rgba(255,255,255,0.07)", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", border: ok ? "2px solid #4ade80" : "2px solid transparent" }}>
-                                {lt.toUpperCase()}
-                              </div>
-                              <input value={form["option_" + lt]} onChange={e => ff("option_" + lt, e.target.value)}
-                                placeholder={"Option " + lt.toUpperCase() + (ok ? " (correct)" : "")}
-                                style={{ ...ainput, borderColor: ok ? "rgba(34,197,94,0.4)" : undefined }} />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div style={{ color: "#475569", fontSize: 11, marginTop: 4 }}>{"Correct: Option " + ["A","B","C","D"][+form.correct]}</div>
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={alabel}>Solution</label>
-                      <textarea rows={3} value={form.solution_text} onChange={e => ff("solution_text", e.target.value)} style={{ ...ainput, resize: "vertical", lineHeight: 1.6 }} />
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={alabel}>Solution Equation - LaTeX (optional)</label>
-                      <input value={form.solution_eq} onChange={e => ff("solution_eq", e.target.value)} style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
-                    </div>
-                    <div style={{ color: "#475569", fontSize: 11, marginBottom: 12 }}>For diagram/option images, use the full editor in the Add Question tab.</div>
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button onClick={handleSave} disabled={loading} style={{ ...abtn("success"), flex: 1, padding: "11px", opacity: loading ? 0.6 : 1 }}>
-                        {loading ? "Saving..." : "Update Question"}
-                      </button>
-                      <button onClick={() => { setForm(aempty()); setEditId(null); setImgInfo(null); }} style={abtn("ghost")}>Cancel</button>
-                    </div>
-                  </div>
-                )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {filtered.map(q => (
+                  <InlineQuestionCard
+                    key={q.id}
+                    q={q}
+                    supabase={supabase}
+                    onSaved={() => loadAll(paperFilter)}
+                    onDeleted={() => loadAll(paperFilter)}
+                  />
+                ))}
               </div>
             )}
           </div>
