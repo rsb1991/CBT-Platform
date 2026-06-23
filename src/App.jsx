@@ -13,9 +13,23 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // CONSTANTS
 // 
 const SUBJECTS = ["Physics", "Chemistry", "Botany", "Zoology"];
+// Derive the actual subject list from loaded questions, preserving NEET order when present
+function subjectsFrom(qs) {
+  const present = [];
+  (qs || []).forEach(q => { if (q && q.subject && !present.includes(q.subject)) present.push(q.subject); });
+  if (!present.length) return SUBJECTS.slice();
+  const ordered = SUBJECTS.filter(s => present.includes(s));
+  const extras  = present.filter(s => !SUBJECTS.includes(s));
+  return ordered.concat(extras);
+}
 const TOTAL_TIME = 3 * 60 * 60;
 const MARKS_CORRECT = 4;
 const MARKS_WRONG = -1;
+// Max marks for a saved result row: questions answered * marks per correct (fallback 720)
+function maxMarksOf(r) {
+  const t = r && (r.total != null ? r.total : null);
+  return (t != null && t > 0) ? t * MARKS_CORRECT : 720;
+}
 const QUESTIONS_PER_SUBJECT = 45;
 const SESSION_KEY = "neet_exam_session"; // localStorage key for exam persistence
 const SCREEN = { LANDING: "landing", AUTH: "auth", ADMIN_AUTH: "admin_auth", ADMIN: "admin", DASHBOARD: "dashboard", INSTRUCTIONS: "instructions", EXAM: "exam", RESULT: "result" };
@@ -595,7 +609,7 @@ function AdminScreen({ onSignOut }) {
     const header = "S.No,Name,Email,Paper ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
     const lines = rows.map((r, i) => {
       const d    = new Date(r.created_at).toLocaleDateString("en-IN");
-      const pct  = Math.round((r.score / 720) * 100);
+      const pct  = Math.round((r.score / maxMarksOf(r)) * 100);
       const st   = r.subject_times || {};
       return [
         i+1, r.user_id.slice(0,12), d, r.score, pct+"%",
@@ -944,7 +958,7 @@ function AdminScreen({ onSignOut }) {
   const downloadTestReport = (testName, rows) => {
     const header = "Rank,Name,Email,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Date";
     const lines = rows.map((r, i) => {
-      const pct = Math.round((r.score/720)*100);
+      const pct = Math.round((r.score / maxMarksOf(r))*100);
       const d   = new Date(r.created_at).toLocaleDateString("en-IN");
       const st  = r.subject_times || {};
       return [i+1, (r.student_name||"").replace(/,/g," "), (r.student_email||""), r.score, pct+"%", r.correct, r.wrong, r.unattempted, r.percentile!=null?r.percentile+"%":"N/A", d].join(",");
@@ -1092,7 +1106,7 @@ function AdminScreen({ onSignOut }) {
       studentMap[key].attempts++;
     });
 
-    const totalMarks = (results[0]?.total || 180) * 4; // 180 questions * 4 marks
+    const totalMarks = (results[0]?.total || (questions.length || 180)) * MARKS_CORRECT;
     const byStudent = Object.values(studentMap).map(s => {
       const avg   = Math.round(s.scores.reduce((a,b)=>a+b,0) / s.scores.length);
       const max   = Math.max(...s.scores);
@@ -1235,12 +1249,12 @@ function AdminScreen({ onSignOut }) {
     answers = answers || {};
     const subTimes = result.subject_times || {};
     const OPTS = ["A","B","C","D"];
-    const SUBJECTS = ["Physics","Chemistry","Botany","Zoology"];
+    const SUBJECTS = subjectsFrom(questions);
     const correct    = result.correct || 0;
     const wrong      = result.wrong || 0;
     const unattempted= result.unattempted || 0;
     const score      = result.score || 0;
-    const totalMarks = (result.total || questions.length) * 4;
+    const totalMarks = (result.total || questions.length) * MARKS_CORRECT;
     const pct        = Math.round(score / totalMarks * 100);
 
     const predictRankLocal = (sc) => {
@@ -2470,7 +2484,7 @@ Rules:
                           <div>Skip</div>
                         </div>
                         {testReports.map((r, i) => {
-                          const pct = Math.round((r.score/720)*100);
+                          const pct = Math.round((r.score / maxMarksOf(r))*100);
                           return (
                             <div key={r.id} style={{ display:"grid", gridTemplateColumns:"50px 1fr 90px 70px 70px 70px", gap:8, padding:"10px 14px", background:i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
                               <div style={{ display:"flex", alignItems:"center", gap:4 }}>
@@ -2480,7 +2494,7 @@ Rules:
                                 <div style={{ color:"#e2e8f0", fontSize:13, fontWeight:600 }}>{r.student_name || r.student_email?.split("@")[0] || "Student"}</div>
                                 <div style={{ color:"#475569", fontSize:10 }}>{r.student_email}</div>
                               </div>
-                              <div style={{ fontWeight:700, color:pct>=50?"#4ade80":"#f87171" }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/720</span></div>
+                              <div style={{ fontWeight:700, color:pct>=50?"#4ade80":"#f87171" }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{maxMarksOf(r)}</span></div>
                               <div style={{ color:"#4ade80", fontWeight:600 }}>{r.correct}</div>
                               <div style={{ color:"#f87171", fontWeight:600 }}>{r.wrong}</div>
                               <div style={{ color:"#64748b" }}>{r.unattempted}</div>
@@ -2684,8 +2698,8 @@ Rules:
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
                     {[
                       ["Total Attempts",    students.length,                                                                                              "#a5b4fc"],
-                      ["Avg Score",         Math.round(students.reduce((a,r) => a+r.score, 0)/students.length) + "/720",                                 "#4ade80"],
-                      ["Highest Score",     Math.max(...students.map(r => r.score)) + "/720",                                                            "#fbbf24"],
+                      ["Avg Score",         Math.round(students.reduce((a,r) => a+r.score, 0)/students.length) + "/" + (students[0] ? maxMarksOf(students[0]) : 720),                                 "#4ade80"],
+                      ["Highest Score",     Math.max(...students.map(r => r.score)) + "/" + (students[0] ? maxMarksOf(students[0]) : 720),                                                            "#fbbf24"],
                       ["Pass Rate",         Math.round(students.filter(r => r.score>=360).length/students.length*100) + "%",                             "#f472b6"],
                     ].map(([l,v,c]) => (
                       <div key={l} style={{ ...acard, padding: "12px 14px", textAlign: "center" }}>
@@ -2782,7 +2796,7 @@ Rules:
                       {rows.length === 0 ? (
                         <div style={{ textAlign: "center", color: "#475569", padding: 20, fontSize: 13 }}>No results match filters.</div>
                       ) : rows.map((r, i) => {
-                        const pct      = Math.round((r.score / 720) * 100);
+                        const pct      = Math.round((r.score / maxMarksOf(r)) * 100);
                         const date     = new Date(r.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" });
                         const time     = new Date(r.created_at).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
                         const isOpen   = reportExpanded === r.id;
@@ -2809,7 +2823,7 @@ Rules:
                                 </div>
                               </div>
                               <div style={{ fontSize: 11, color: "#94a3b8" }}>{date}<br/><span style={{ color: "#475569" }}>{time}</span></div>
-                              <div style={{ fontWeight: 700, color: pct>=50?"#4ade80":"#f87171", fontSize: "0.9rem" }}>{r.score}<span style={{ color: "#374151", fontWeight: 400, fontSize: 10 }}>/720</span></div>
+                              <div style={{ fontWeight: 700, color: pct>=50?"#4ade80":"#f87171", fontSize: "0.9rem" }}>{r.score}<span style={{ color: "#374151", fontWeight: 400, fontSize: 10 }}>/{maxMarksOf(r)}</span></div>
                               <div style={{ color: "#4ade80", fontWeight: 600, fontSize: 13 }}>{r.correct}</div>
                               <div style={{ color: "#f87171", fontWeight: 600, fontSize: 13 }}>{r.wrong}</div>
                               <div style={{ color: "#64748b", fontSize: 13 }}>{r.unattempted}</div>
@@ -2845,7 +2859,7 @@ Rules:
                                     ["Correct",     r.correct,     "+"+r.correct*4+" marks",    "#4ade80"],
                                     ["Wrong",       r.wrong,       "-"+r.wrong+" marks",          "#f87171"],
                                     ["Unattempted", r.unattempted, "0 marks",                    "#64748b"],
-                                    ["Total Score", r.score+"/720","",                           "#a5b4fc"],
+                                    ["Total Score", r.score+"/"+maxMarksOf(r),"",                           "#a5b4fc"],
                                   ].map(([l,v,extra,c]) => (
                                     <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
                                       <span style={{ color: "#94a3b8" }}>{l}</span>
@@ -2922,7 +2936,7 @@ Rules:
                       <div style={{ ...acard, padding:"14px 18px" }}>
                         <div style={{ color:"#e2e8f0", fontWeight:700, marginBottom:10 }}>{name}</div>
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
-                          {[["Tests",studentReportData.length,"#a5b4fc"],["Best",best+"/720","#4ade80"],["Avg",avgSc+"/720","#fbbf24"],["Trend",trend,trendCol]].map(([l,v,c])=>(
+                          {[["Tests",studentReportData.length,"#a5b4fc"],["Best",best+"/"+(studentReportData[0]?maxMarksOf(studentReportData[0]):720),"#4ade80"],["Avg",avgSc+"/"+(studentReportData[0]?maxMarksOf(studentReportData[0]):720),"#fbbf24"],["Trend",trend,trendCol]].map(([l,v,c])=>(
                             <div key={l} style={{ background:"rgba(255,255,255,0.03)", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
                               <div style={{ color:c, fontWeight:700 }}>{v}</div>
                               <div style={{ color:"#64748b", fontSize:10, marginTop:2 }}>{l}</div>
@@ -2934,7 +2948,7 @@ Rules:
                         <div style={{ ...acard, padding:"14px 18px" }}>
                           <div style={{ color:"#a5b4fc", fontSize:11, fontWeight:600, marginBottom:8, textTransform:"uppercase" }}>Score Trend</div>
                           <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:70 }}>
-                            {studentReportData.map((r,i)=>{ const h=Math.max(4,Math.round((r.score/720)*100)); return (
+                            {studentReportData.map((r,i)=>{ const h=Math.max(4,Math.round((r.score / maxMarksOf(r))*100)); return (
                               <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
                                 <div style={{ fontSize:8, color:"#64748b" }}>{r.score}</div>
                                 <div style={{ width:"100%", background:h>=50?"#6366f1":"#ef4444", borderRadius:"2px 2px 0 0", height:h*0.65+"%" }} />
@@ -2944,7 +2958,7 @@ Rules:
                           </div>
                         </div>
                       )}
-                      {studentReportData.map((r,i)=>{ const pct=Math.round((r.score/720)*100); const d=new Date(r.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"}); const st=r.subject_times||{}; return (
+                      {studentReportData.map((r,i)=>{ const pct=Math.round((r.score / maxMarksOf(r))*100); const d=new Date(r.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"}); const st=r.subject_times||{}; return (
                         <div key={r.id} style={{ ...acard, padding:"12px 16px", display:"flex", alignItems:"center", gap:12 }}>
                           <div style={{ width:36, height:36, borderRadius:"50%", background:pct>=50?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)", border:"2px solid "+(pct>=50?"#22c55e":"#ef4444"), display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, color:pct>=50?"#4ade80":"#f87171", fontSize:11, flexShrink:0 }}>{pct}%</div>
                           <div style={{ flex:1 }}>
@@ -2955,7 +2969,7 @@ Rules:
                             </div>
                           </div>
                           <div style={{ textAlign:"right", flexShrink:0 }}>
-                            <div style={{ color:"#e2e8f0", fontWeight:700 }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/720</span></div>
+                            <div style={{ color:"#e2e8f0", fontWeight:700 }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{maxMarksOf(r)}</span></div>
                             <div style={{ fontSize:11 }}><span style={{ color:"#4ade80" }}>{r.correct}C</span> <span style={{ color:"#f87171" }}>{r.wrong}W</span> <span style={{ color:"#94a3b8" }}>{r.unattempted}S</span></div>
                             {r.percentile!=null && <div style={{ fontSize:10, color:"#818cf8" }}>{r.percentile}th %ile</div>}
                           </div>
@@ -3850,8 +3864,8 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }} className="mob-grid1">
           {[
             { label: "Tests Taken", value: history.length, color: "#818cf8" },
-            { label: "Best Score", value: bestScore !== null ? `${bestScore}/720` : "", color: "#4ade80" },
-            { label: "Avg Score", value: avgScore !== null ? `${avgScore}/720` : "", color: "#fbbf24" },
+            { label: "Best Score", value: bestScore !== null ? `${bestScore}/${history[0]?maxMarksOf(history[0]):720}` : "", color: "#4ade80" },
+            { label: "Avg Score", value: avgScore !== null ? `${avgScore}/${history[0]?maxMarksOf(history[0]):720}` : "", color: "#fbbf24" },
           ].map(s => (
             <div key={s.label} style={{ ...card(), padding: "20px 24px", textAlign: "center" }}>
               <div style={{ fontSize: "2rem", fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -3888,7 +3902,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 20 }}>
-              {[["Questions","180"],["Duration","3 Hours"],["Max Marks","720"],["Correct","+4 marks"],["Wrong","-1 mark"],["Unattempted","0 marks"]].map(([l,v]) => (
+              {[["Questions", String(settings?.total_questions || "As per paper")],["Duration", settings?.exam_duration || "3 Hours"],["Max Marks", String(settings?.max_marks || (settings?.total_questions ? settings.total_questions * MARKS_CORRECT : "As per paper"))],["Correct","+" + MARKS_CORRECT + " marks"],["Wrong", MARKS_WRONG + " mark"],["Unattempted","0 marks"]].map(([l,v]) => (
                 <div key={l} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "10px 14px" }}>
                   <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase" }}>{l}</div>
                   <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14, marginTop: 2 }}>{v}</div>
@@ -3934,7 +3948,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {history.map((r, i) => {
-                  const pct2 = Math.round((r.score / 720) * 100);
+                  const pct2 = Math.round((r.score / maxMarksOf(r)) * 100);
                   const date = new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
                   return (
                     <div key={i} style={{ ...card(), padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
@@ -3948,7 +3962,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#e2e8f0" }}>{r.score}</div>
-                        <div style={{ fontSize: 11, color: "#64748b" }}>/ 720</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>/ {maxMarksOf(r)}</div>
                       </div>
                       <div style={{ textAlign: "right", fontSize: 11, color: "#64748b", flexShrink: 0 }}>
                         <div style={{ color: "#4ade80" }}>Correct: {r.correct}</div>
@@ -3974,7 +3988,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {leaderboard.map((r, i) => {
-                  const pct3 = Math.round((r.score / 720) * 100);
+                  const pct3 = Math.round((r.score / maxMarksOf(r)) * 100);
                   const isMe = r.user_id === user.id;
                   return (
                     <div key={i} style={{ ...card(), padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, border: isMe ? "1px solid rgba(99,102,241,0.4)" : undefined, background: isMe ? "rgba(99,102,241,0.08)" : undefined }}>
@@ -3988,7 +4002,7 @@ function Dashboard({ user, onStart, onSignOut, settings, branding = {} }) {
                         </div>
                       </div>
                       <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: "1.1rem" }}>{r.score}</div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>/ 720</div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>/ {maxMarksOf(r)}</div>
                     </div>
                   );
                 })}
@@ -4016,7 +4030,7 @@ function InstructionsScreen({ onBegin, onBack, branding = {} }) {
           </div>
           <div style={{ padding: "26px 30px", color: "#cbd5e1", lineHeight: 1.8 }}>
             {[
-              ["Exam Structure", ["180 questions: Physics (45), Chemistry (45), Botany (45), Zoology (45).", "Duration: 3 hours. No extra time."]],
+              ["Exam Structure", ["Number of questions and subjects are as per the assigned paper.", "Each correct answer: +" + MARKS_CORRECT + " marks. Each wrong answer: " + MARKS_WRONG + " mark. Unattempted: 0."]],
               ["Marking Scheme", ["Correct answer: +4 marks.", "Incorrect answer: 1 mark (negative marking).", "Unattempted: 0 marks."]],
               ["Navigation", ["Use the right-side palette to jump to any question.", "Mark questions for review  return before submitting.", "'Save & Next' saves your answer and moves forward."]],
               ["Important", ["Do not refresh or close the tab during the exam.", "Timer auto-submits the test on expiry.", "Once submitted, the test cannot be resumed."]],
@@ -4646,8 +4660,8 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
     else wrong++;
   });
   const score     = correct * MARKS_CORRECT + wrong * MARKS_WRONG;
-  const pct       = Math.round((score / 720) * 100);
   const maxQ      = questions.length * MARKS_CORRECT;
+  const pct       = Math.round((score / (maxQ || 1)) * 100);
   const timePerQ  = meta?.timePerQ     || {};
   const subTimes  = meta?.subjectTimes || {};
   const bookmarked= new Set(meta?.bookmarks || []);
@@ -4691,12 +4705,12 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
     }
     const OPTS = ["A","B","C","D"];
     // Subject-wise summary
-    const subjSummary = ["Physics","Chemistry","Botany","Zoology"].map(s => {
+    const subjSummary = subjectsFrom(questions).map(s => {
       const sq = questions.filter(q => q.subject === s);
       const c  = sq.filter(q => answers[q.id] === q.correct).length;
       const w  = sq.filter(q => answers[q.id] !== undefined && answers[q.id] !== q.correct).length;
       const u  = sq.filter(q => answers[q.id] === undefined).length;
-      const sc = c*4 + w*(-1);
+      const sc = c*MARKS_CORRECT + w*MARKS_WRONG;
       return "<tr><td><b>" + s + "</b></td><td style='color:green'>" + c + "</td><td style='color:red'>" + w + "</td><td style='color:gray'>" + u + "</td><td><b>" + sc + "</b></td></tr>";
     }).join("");
     // Full question list with solutions
@@ -4751,7 +4765,7 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
       "<p style='color:#6b7280;font-size:13px'>Generated on " + new Date().toLocaleString("en-IN") + "</p>" +
       "<div class='noprint' style='margin:8px 0 20px'><button onclick='window.print()' style='background:#312e81;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer'>Print / Save as PDF</button></div>" +
       "<div style='margin:16px 0'>" +
-      "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / 720</div></div>" +
+      "<div class='stat'><div class='big'>" + score + "</div><div class='lbl'>Score / " + maxQ + "</div></div>" +
       "<div class='stat'><div class='big'>" + pct + "%</div><div class='lbl'>Percentage</div></div>" +
       "<div class='stat'><div class='big'>" + correct + "</div><div class='lbl'>Correct</div></div>" +
       "<div class='stat'><div class='big'>" + wrong + "</div><div class='lbl'>Wrong</div></div>" +
@@ -4819,7 +4833,7 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginBottom: 20 }}>
               <div style={{ background: "linear-gradient(135deg,rgba(99,102,241,0.2),rgba(168,85,247,0.15))", border: "1px solid rgba(99,102,241,0.35)", borderRadius: 16, padding: "24px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ fontSize: "3.5rem", fontWeight: 700, color: "#a5b4fc", lineHeight: 1 }}>{score}</div>
-                <div style={{ color: "#475569", fontSize: 14, marginTop: 4 }}>out of 720</div>
+                <div style={{ color: "#475569", fontSize: 14, marginTop: 4 }}>out of {maxQ}</div>
                 <div style={{ marginTop: 12, background: "rgba(0,0,0,0.3)", borderRadius: 99, height: 7 }}>
                   <div style={{ height: "100%", borderRadius: 99, background: "linear-gradient(90deg,#6366f1,#a855f7)", width: Math.max(0,pct) + "%", transition: "width 1.5s" }} />
                 </div>
@@ -5422,7 +5436,7 @@ export default function App() {
     try {
       const reportEmail = (settings && settings.report_email) ? settings.report_email.trim() : "";
       if (reportEmail) {
-        const subjRows = ["Physics","Chemistry","Botany","Zoology"].map(sub => {
+        const subjRows = subjectsFrom(questions).map(sub => {
           const sq = questions.filter(q => q.subject === sub);
           if (!sq.length) return "";
           const c = sq.filter(q => ans[q.id] === q.correct).length;
@@ -5432,7 +5446,7 @@ export default function App() {
                  "<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#16a34a'>" + c + "</td>" +
                  "<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#dc2626'>" + w + "</td>" +
                  "<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#6b7280'>" + u + "</td>" +
-                 "<td style='padding:6px 10px;border-bottom:1px solid #eee'><b>" + (c*4 + w*(-1)) + "</b></td></tr>";
+                 "<td style='padding:6px 10px;border-bottom:1px solid #eee'><b>" + (c*MARKS_CORRECT + w*MARKS_WRONG) + "</b></td></tr>";
         }).join("");
         const pctVal = questions.length ? Math.round((correct / questions.length) * 100) : 0;
         const html =
@@ -5441,7 +5455,7 @@ export default function App() {
           "<p><b>Student:</b> " + (payload.student_name || "Student") + " &nbsp; | &nbsp; <b>Email:</b> " + (payload.student_email || "-") + "</p>" +
           "<p><b>Paper ID:</b> " + (payload.paper_id || "-") + " &nbsp; | &nbsp; <b>Submitted:</b> " + new Date().toLocaleString("en-IN") + "</p>" +
           "<table style='border-collapse:collapse;margin:14px 0'>" +
-          "<tr><td style='padding:8px 16px;background:#f3f4f6;border-radius:8px'><b>Score:</b> " + score + " / 720</td>" +
+          "<tr><td style='padding:8px 16px;background:#f3f4f6;border-radius:8px'><b>Score:</b> " + score + " / " + (questions.length * MARKS_CORRECT) + "</td>" +
           "<td style='padding:8px 16px;background:#f3f4f6;border-radius:8px'><b>Percentage:</b> " + pctVal + "%</td></tr></table>" +
           "<p><b>Correct:</b> " + correct + " &nbsp; <b>Wrong:</b> " + wrong + " &nbsp; <b>Unattempted:</b> " + unattempted +
           (percentile != null ? " &nbsp; <b>Percentile:</b> " + percentile + "%" : "") + "</p>" +
