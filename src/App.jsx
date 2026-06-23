@@ -656,15 +656,18 @@ function AdminScreen({ onSignOut }) {
       option_c_image: form.option_c_image || "", option_d_image: form.option_d_image || "",
       paper_id: form.paper_id || "PAPER_01", chapter: form.chapter || "", difficulty: form.difficulty || "medium",
     };
+    const wasEdit = !!editId;
     const { error } = editId
       ? await supabase.from("questions").update(payload).eq("id", editId)
       : await supabase.from("questions").insert([payload]);
     setLoading(false);
     if (error) { setMsg({ type: "error", text: error.message }); }
     else {
-      setMsg({ type: "success", text: editId ? "Updated!" : "Saved!" });
-      setForm(aempty()); setImgInfo(null); setEditId(null);
+      setMsg({ type: "success", text: wasEdit ? "Updated!" : "Saved!" });
       loadAll(paperFilter);
+      // After editing in the side panel, keep the panel open so reviewing/editing
+      // the next question stays quick. After adding a new question, clear the form.
+      if (!wasEdit) { setForm(aempty()); setImgInfo(null); setEditId(null); }
       setTimeout(() => setMsg(null), 3000);
     }
   };
