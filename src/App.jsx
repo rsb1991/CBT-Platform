@@ -1922,10 +1922,11 @@ function AdminScreen({ onSignOut }) {
 
                 // Build content array with all images
                 const content = [
-                  ...scanImages.map(img => ({
-                    type: "image",
-                    source: { type:"base64", media_type: img.type === "application/pdf" ? "image/jpeg" : img.type, data: img.b64 }
-                  })),
+                  ...scanImages.map(img => (
+                    img.type === "application/pdf"
+                      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: img.b64 } }
+                      : { type: "image", source: { type: "base64", media_type: img.type, data: img.b64 } }
+                  )),
                   {
                     type: "text",
                     text: `Extract ALL multiple choice questions from this question paper image(s).
@@ -1949,12 +1950,12 @@ Rules:
                 ];
 
                 try {
-                  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+                  const resp = await fetch("/api/extract", {
                     method:"POST",
                     headers:{ "Content-Type":"application/json" },
                     body: JSON.stringify({
-                      model: "claude-sonnet-4-20250514",
-                      max_tokens: 8000,
+                      model: "claude-sonnet-4-6",
+                      max_tokens: 16000,
                       messages: [{ role:"user", content }]
                     })
                   });
