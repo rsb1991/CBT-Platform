@@ -1565,7 +1565,7 @@ function AdminScreen({ onSignOut }) {
         <button onClick={onSignOut} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>Sign Out</button>
       </div>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
+      <div style={{ maxWidth: (tab === "list" && editId) ? 1500 : 960, margin: "0 auto", padding: 20, transition: "max-width 0.2s" }}>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           {[["add","Add Question"],["csv","CSV Upload"],["scan","Scan Paper "],["list","All Questions (" + questions.length + ")"],["settings","Exam Settings"],["batches","Batches"],["students","Student Data"],["analytics","Analytics"],["branding","Branding"]].map(([t,l]) => (
@@ -2106,7 +2106,7 @@ Rules:
             ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No questions found.</div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: editId ? "1fr 1fr" : "1fr", gap: 16, alignItems: "start" }}>
+              <div style={{ display: "grid", gridTemplateColumns: editId ? "minmax(420px, 1fr) minmax(380px, 520px)" : "1fr", gap: 16, alignItems: "start" }}>
                 {/* LEFT: full question cards */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {filtered.map(q => {
