@@ -18,6 +18,29 @@ import React, { useEffect, useRef, useState } from "react";
 // KaTeX loader  CDN, cached after first load
 // 
 let _katexPromise = null;
+
+// Convert common Unicode math symbols to LaTeX so KaTeX renders them instead of erroring
+function normalizeMath(m) {
+  if (!m) return m;
+  return m
+    .replace(/\u00D7/g, " \\times ")
+    .replace(/\u00F7/g, " \\div ")
+    .replace(/\u2212/g, "-")
+    .replace(/\u00B7/g, " \\cdot ")
+    .replace(/\u2264/g, " \\leq ")
+    .replace(/\u2265/g, " \\geq ")
+    .replace(/\u2260/g, " \\neq ")
+    .replace(/\u00B0/g, "^{\\circ}")
+    .replace(/\u03B1/g, "\\alpha ")
+    .replace(/\u03B2/g, "\\beta ")
+    .replace(/\u03B3/g, "\\gamma ")
+    .replace(/\u03B8/g, "\\theta ")
+    .replace(/\u03BB/g, "\\lambda ")
+    .replace(/\u03BC/g, "\\mu ")
+    .replace(/\u03C0/g, "\\pi ")
+    .replace(/\u03C9/g, "\\omega ")
+    .replace(/\u0394/g, "\\Delta ");
+}
 function loadKatex() {
   if (_katexPromise) return _katexPromise;
   _katexPromise = new Promise((resolve) => {
@@ -132,7 +155,7 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
 
         //  Block math $$...$$
         if (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) {
-          const math = part.slice(2, -2).trim();
+          const math = normalizeMath(part.slice(2, -2).trim());
           const wrap = document.createElement("div");
           wrap.style.cssText =
             "display:block;text-align:center;margin:12px 0;overflow-x:auto;padding:4px 0;";
@@ -148,7 +171,7 @@ function RichBlock({ text, color = "#e2e8f0", fontSize = "1.05rem" }) {
 
         //  Inline math $...$
         if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
-          const math = part.slice(1, -1).trim();
+          const math = normalizeMath(part.slice(1, -1).trim());
           const span = document.createElement("span");
           try {
             katex && katex.render(math, span, { displayMode: false, throwOnError: false });
