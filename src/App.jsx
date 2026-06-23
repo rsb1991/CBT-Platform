@@ -664,15 +664,17 @@ function AdminScreen({ onSignOut }) {
     else {
       setMsg({ type: "success", text: editId ? "Updated!" : "Saved!" });
       setForm(aempty()); setImgInfo(null); setEditId(null);
+      loadAll(paperFilter);
       setTimeout(() => setMsg(null), 3000);
     }
   };
 
   //  Edit question 
-  const handleEdit = (q) => {
+  const handleEdit = (q, stayOnList) => {
     setForm({ number: String(q.number), subject: q.subject || "Physics", question_text: q.question_text || "", equation: q.equation || "", diagram_data: q.diagram_data || "", option_a: q.option_a || "", option_b: q.option_b || "", option_c: q.option_c || "", option_d: q.option_d || "", option_a_image: q.option_a_image || "", option_b_image: q.option_b_image || "", option_c_image: q.option_c_image || "", option_d_image: q.option_d_image || "", correct: String(q.correct), solution_text: q.solution_text || "", solution_eq: q.solution_eq || "", solution_diagram_data: q.solution_diagram_data || "", paper_id: q.paper_id || "PAPER_01", chapter: q.chapter || "", difficulty: q.difficulty || "medium" });
     setImgInfo(q.diagram_data ? { kb: Math.round(q.diagram_data.length * 0.75 / 1024) } : null);
-    setEditId(q.id); setTab("add");
+    setEditId(q.id);
+    if (!stayOnList) setTab("add");
   };
 
   //  Delete question 
@@ -2104,37 +2106,120 @@ Rules:
             ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>No questions found.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {filtered.map(q => (
-                  <div key={q.id} style={{ ...acard, display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    {q.diagram_data ? (
-                      <img src={q.diagram_data} alt="" style={{ width: 56, height: 40, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: 56, height: 40, borderRadius: 6, background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#374151", fontSize: 12 }}>Q{q.number}</div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: SUBJ_COLORS_A[q.subject] || "#818cf8" }}>{"Q" + q.number + " - " + q.subject}</span>
-                        {q.diagram_data && <span style={{ fontSize: 10, color: "#4ade80", background: "rgba(34,197,94,0.1)", padding: "1px 6px", borderRadius: 4 }}>image</span>}
-                        {q.equation    && <span style={{ fontSize: 10, color: "#818cf8", background: "rgba(99,102,241,0.1)", padding: "1px 6px", borderRadius: 4 }}>eq</span>}
+              <div style={{ display: "grid", gridTemplateColumns: editId ? "1fr 1fr" : "1fr", gap: 16, alignItems: "start" }}>
+                {/* LEFT: full question cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {filtered.map(q => {
+                    const selected = editId === q.id;
+                    return (
+                      <div key={q.id} onClick={() => handleEdit(q, true)}
+                        style={{ ...acard, cursor: "pointer", border: selected ? "1px solid #6366f1" : (acard.border || "1px solid rgba(255,255,255,0.07)"), boxShadow: selected ? "0 0 0 1px #6366f1" : "none" }}>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: SUBJ_COLORS_A[q.subject] || "#818cf8" }}>{"Q" + q.number + " - " + q.subject}</span>
+                          {q.diagram_data && <span style={{ fontSize: 10, color: "#4ade80", background: "rgba(34,197,94,0.1)", padding: "1px 6px", borderRadius: 4 }}>image</span>}
+                          {q.equation    && <span style={{ fontSize: 10, color: "#818cf8", background: "rgba(99,102,241,0.1)", padding: "1px 6px", borderRadius: 4 }}>eq</span>}
+                          <span style={{ flex: 1 }} />
+                          <button onClick={e => { e.stopPropagation(); handleEdit(q, true); }} style={abtn("sm")}>Edit</button>
+                          <button onClick={e => { e.stopPropagation(); handleDelete(q.id); }} style={{ ...abtn("danger"), padding: "5px 12px", fontSize: "0.78rem" }}>Delete</button>
+                        </div>
+                        {q.diagram_data && (
+                          <img src={q.diagram_data} alt="" style={{ maxHeight: 160, maxWidth: "100%", objectFit: "contain", borderRadius: 8, display: "block", marginBottom: 8 }} />
+                        )}
+                        <div style={{ fontSize: "0.9rem", color: "#e2e8f0", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                          {q.question_text || "(no text)"}
+                        </div>
+                        {q.equation && <div style={{ fontSize: 12, color: "#a5b4fc", fontFamily: "monospace", marginTop: 6 }}>{q.equation}</div>}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                          {[q.option_a, q.option_b, q.option_c, q.option_d].map((opt, i) => {
+                            const ok = i === q.correct;
+                            const optImg = q["option_" + ["a","b","c","d"][i] + "_image"];
+                            return (
+                              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "6px 10px", borderRadius: 6, background: ok ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.03)", border: ok ? "1px solid rgba(34,197,94,0.3)" : "1px solid transparent" }}>
+                                <span style={{ fontWeight: 700, color: ok ? "#4ade80" : "#64748b" }}>{["A","B","C","D"][i]}</span>
+                                {optImg && <img src={optImg} alt="" style={{ maxHeight: 40, maxWidth: 120, objectFit: "contain", borderRadius: 4 }} />}
+                                <span style={{ color: ok ? "#4ade80" : "#c7d2fe" }}>{opt || (optImg ? "(image)" : "")}</span>
+                                {ok && <span style={{ marginLeft: "auto", fontSize: 10, color: "#4ade80", fontWeight: 700 }}>CORRECT</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {(q.solution_text || q.solution_eq || q.solution_diagram_data) && (
+                          <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)", borderRadius: 8 }}>
+                            <div style={{ fontSize: 11, color: "#818cf8", fontWeight: 700, marginBottom: 4 }}>SOLUTION</div>
+                            {q.solution_text && <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{q.solution_text}</div>}
+                            {q.solution_eq && <div style={{ fontSize: 12, color: "#a5b4fc", fontFamily: "monospace", marginTop: 4 }}>{q.solution_eq}</div>}
+                            {q.solution_diagram_data && <img src={q.solution_diagram_data} alt="" style={{ maxHeight: 120, maxWidth: "100%", objectFit: "contain", borderRadius: 6, marginTop: 6 }} />}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ fontSize: "0.85rem", color: "#c7d2fe", lineHeight: 1.4 }}>
-                        {(q.question_text || q.equation || "(no text)").slice(0, 120)}
+                    );
+                  })}
+                </div>
+
+                {/* RIGHT: editor side panel (shows when a card is selected) */}
+                {editId && (
+                  <div style={{ position: "sticky", top: 12, alignSelf: "start", ...acard, padding: "16px 18px", maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                      <div style={{ color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>{"Editing Q" + form.number + " - " + form.subject}</div>
+                      <button onClick={() => { setForm(aempty()); setEditId(null); setImgInfo(null); }} style={abtn("sm")}>Close</button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 10, marginBottom: 12 }}>
+                      <div>
+                        <label style={alabel}>Q Number</label>
+                        <input type="number" min="1" value={form.number} onChange={e => ff("number", e.target.value)} style={ainput} />
                       </div>
-                      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                        {[q.option_a, q.option_b, q.option_c, q.option_d].map((opt, i) => (
-                          <span key={i} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: i === q.correct ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.03)", color: i === q.correct ? "#4ade80" : "#64748b" }}>
-                            {["A","B","C","D"][i] + ") " + (opt || "").slice(0, 18) + ((opt || "").length > 18 ? "..." : "")}
-                          </span>
-                        ))}
+                      <div>
+                        <label style={alabel}>Subject</label>
+                        <select value={form.subject} onChange={e => ff("subject", e.target.value)} style={{ ...ainput, cursor: "pointer" }}>
+                          {SUBJECTS.map(sub => <option key={sub}>{sub}</option>)}
+                        </select>
                       </div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
-                      <button onClick={() => handleEdit(q)} style={abtn("sm")}>Edit</button>
-                      <button onClick={() => handleDelete(q.id)} style={{ ...abtn("danger"), padding: "5px 12px", fontSize: "0.78rem" }}>Delete</button>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={alabel}>Question Text</label>
+                      <textarea rows={4} value={form.question_text} onChange={e => ff("question_text", e.target.value)} style={{ ...ainput, resize: "vertical", lineHeight: 1.6 }} />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={alabel}>Equation - LaTeX (optional)</label>
+                      <input value={form.equation} onChange={e => ff("equation", e.target.value)} style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={alabel}>Options - click letter to mark correct</label>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {["a","b","c","d"].map((lt, i) => {
+                          const ok = String(i) === form.correct;
+                          return (
+                            <div key={lt} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <div onClick={() => ff("correct", String(i))}
+                                style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: ok ? "#22c55e" : "rgba(255,255,255,0.07)", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", border: ok ? "2px solid #4ade80" : "2px solid transparent" }}>
+                                {lt.toUpperCase()}
+                              </div>
+                              <input value={form["option_" + lt]} onChange={e => ff("option_" + lt, e.target.value)}
+                                placeholder={"Option " + lt.toUpperCase() + (ok ? " (correct)" : "")}
+                                style={{ ...ainput, borderColor: ok ? "rgba(34,197,94,0.4)" : undefined }} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ color: "#475569", fontSize: 11, marginTop: 4 }}>{"Correct: Option " + ["A","B","C","D"][+form.correct]}</div>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={alabel}>Solution</label>
+                      <textarea rows={3} value={form.solution_text} onChange={e => ff("solution_text", e.target.value)} style={{ ...ainput, resize: "vertical", lineHeight: 1.6 }} />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={alabel}>Solution Equation - LaTeX (optional)</label>
+                      <input value={form.solution_eq} onChange={e => ff("solution_eq", e.target.value)} style={{ ...ainput, fontFamily: "monospace", fontSize: 12 }} />
+                    </div>
+                    <div style={{ color: "#475569", fontSize: 11, marginBottom: 12 }}>For diagram/option images, use the full editor in the Add Question tab.</div>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button onClick={handleSave} disabled={loading} style={{ ...abtn("success"), flex: 1, padding: "11px", opacity: loading ? 0.6 : 1 }}>
+                        {loading ? "Saving..." : "Update Question"}
+                      </button>
+                      <button onClick={() => { setForm(aempty()); setEditId(null); setImgInfo(null); }} style={abtn("ghost")}>Cancel</button>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
