@@ -149,6 +149,7 @@ async function sbFetchQuestions(paperId = "PAPER_01") {
       .from("questions")
       .select("id, number, subject, type, question_text, equation, diagram_url, option_a, option_b, option_c, option_d, option_a_image, option_b_image, option_c_image, option_d_image, correct, solution_text, solution_eq, paper_id")
       .eq("paper_id", paperId)
+      .order("subject", { ascending: true })
       .order("number", { ascending: true });
 
     if (error) return { questions: null, error: friendlyError(error, "questions"), source: null };
@@ -177,6 +178,18 @@ async function sbFetchQuestions(paperId = "PAPER_01") {
       solution_eq:           q.solution_eq || "",
       solution_diagram_data: "",  // loaded on-demand
     }));
+
+    // Enforce NEET subject order (Physics, Chemistry, Botany, Zoology), then question number.
+    // DB .order("subject") is alphabetical, so we re-sort here using the defined SUBJECTS order.
+    const subjectRank = (sub) => {
+      const i = SUBJECTS.indexOf(sub);
+      return i === -1 ? 999 : i;
+    };
+    questions.sort((a, b) => {
+      const r = subjectRank(a.subject) - subjectRank(b.subject);
+      if (r !== 0) return r;
+      return (a.number || 0) - (b.number || 0);
+    });
 
     return { questions, error: null, source: "supabase" };
   } catch (e) {
