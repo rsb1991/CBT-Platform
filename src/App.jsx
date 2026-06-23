@@ -391,7 +391,11 @@ function compressToBase64(file) {
       const cv = document.createElement("canvas");
       cv.width  = Math.round(img.width  * scale);
       cv.height = Math.round(img.height * scale);
-      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      const ctx = cv.getContext("2d");
+      // Fill white first so transparent PNG areas become white (not black) when flattened to JPEG
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
       const b64 = cv.toDataURL("image/jpeg", QUALITY_IMG);
       resolve({ b64, kb: Math.round((b64.length * 3) / 4 / 1024), w: cv.width, h: cv.height });
     };
@@ -519,7 +523,7 @@ function InlineQuestionCard({ q, supabase, onSaved, onDeleted }) {
       <label style={alabel}>{label}</label>
       {d[key] ? (
         <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: "8px 10px" }}>
-          <img src={d[key]} alt="" style={{ maxHeight: 80, maxWidth: 180, objectFit: "contain", borderRadius: 4 }} />
+          <img src={d[key]} alt="" style={{ maxHeight: 80, maxWidth: 180, objectFit: "contain", borderRadius: 4, background: "#1e293b", padding: 4, filter: "invert(1)" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <button onClick={() => pickImage(key)} style={{ ...abtn("primary"), fontSize: 11, padding: "4px 12px" }}>Replace</button>
             <button onClick={() => set(key, "")} style={{ ...abtn("danger"), fontSize: 11, padding: "4px 12px" }}>Remove</button>
@@ -584,7 +588,7 @@ function InlineQuestionCard({ q, supabase, onSaved, onDeleted }) {
                     style={{ ...ainput, borderColor: ok ? "rgba(34,197,94,0.4)" : undefined }} />
                   {d[imgKey] ? (
                     <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: "6px 10px" }}>
-                      <img src={d[imgKey]} alt="" style={{ maxHeight: 50, maxWidth: 140, objectFit: "contain", borderRadius: 4 }} />
+                      <img src={d[imgKey]} alt="" style={{ maxHeight: 50, maxWidth: 140, objectFit: "contain", borderRadius: 4, background: "#1e293b", padding: 4, filter: "invert(1)" }} />
                       <button onClick={() => pickImage(imgKey)} style={{ ...abtn("primary"), fontSize: 10, padding: "3px 10px" }}>Replace</button>
                       <button onClick={() => set(imgKey, "")} style={{ ...abtn("danger"), fontSize: 10, padding: "3px 10px" }}>Remove</button>
                     </div>
@@ -2278,7 +2282,7 @@ Rules:
                     key={q.id}
                     q={q}
                     supabase={supabase}
-                    onSaved={() => loadAll(paperFilter)}
+                    onSaved={() => {}}
                     onDeleted={() => loadAll(paperFilter)}
                   />
                 ))}
