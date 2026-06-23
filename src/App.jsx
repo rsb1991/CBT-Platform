@@ -2122,35 +2122,7 @@ Rules:
                           <button onClick={e => { e.stopPropagation(); handleEdit(q, true); }} style={abtn("sm")}>Edit</button>
                           <button onClick={e => { e.stopPropagation(); handleDelete(q.id); }} style={{ ...abtn("danger"), padding: "5px 12px", fontSize: "0.78rem" }}>Delete</button>
                         </div>
-                        {q.diagram_data && (
-                          <img src={q.diagram_data} alt="" style={{ maxHeight: 160, maxWidth: "100%", objectFit: "contain", borderRadius: 8, display: "block", marginBottom: 8 }} />
-                        )}
-                        <div style={{ fontSize: "0.9rem", color: "#e2e8f0", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                          {q.question_text || "(no text)"}
-                        </div>
-                        {q.equation && <div style={{ fontSize: 12, color: "#a5b4fc", fontFamily: "monospace", marginTop: 6 }}>{q.equation}</div>}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                          {[q.option_a, q.option_b, q.option_c, q.option_d].map((opt, i) => {
-                            const ok = i === q.correct;
-                            const optImg = q["option_" + ["a","b","c","d"][i] + "_image"];
-                            return (
-                              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "6px 10px", borderRadius: 6, background: ok ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.03)", border: ok ? "1px solid rgba(34,197,94,0.3)" : "1px solid transparent" }}>
-                                <span style={{ fontWeight: 700, color: ok ? "#4ade80" : "#64748b" }}>{["A","B","C","D"][i]}</span>
-                                {optImg && <img src={optImg} alt="" style={{ maxHeight: 40, maxWidth: 120, objectFit: "contain", borderRadius: 4 }} />}
-                                <span style={{ color: ok ? "#4ade80" : "#c7d2fe" }}>{opt || (optImg ? "(image)" : "")}</span>
-                                {ok && <span style={{ marginLeft: "auto", fontSize: 10, color: "#4ade80", fontWeight: 700 }}>CORRECT</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {(q.solution_text || q.solution_eq || q.solution_diagram_data) && (
-                          <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)", borderRadius: 8 }}>
-                            <div style={{ fontSize: 11, color: "#818cf8", fontWeight: 700, marginBottom: 4 }}>SOLUTION</div>
-                            {q.solution_text && <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{q.solution_text}</div>}
-                            {q.solution_eq && <div style={{ fontSize: 12, color: "#a5b4fc", fontFamily: "monospace", marginTop: 4 }}>{q.solution_eq}</div>}
-                            {q.solution_diagram_data && <img src={q.solution_diagram_data} alt="" style={{ maxHeight: 120, maxWidth: "100%", objectFit: "contain", borderRadius: 6, marginTop: 6 }} />}
-                          </div>
-                        )}
+                        <QuestionRenderer q={q} showSolution={true} />
                       </div>
                     );
                   })}
