@@ -113,8 +113,8 @@ function InlineImage({ url, alt = "diagram" }) {
           border: "1px solid rgba(255,255,255,0.1)",
           background: "#1e293b",
           padding: 6,
-          // Invert image colors when in dark mode (so black diagrams on white bg become visible)
-          filter: (typeof getTheme === "function" ? getTheme() : true) ? "invert(1) hue-rotate(180deg)" : "none",
+          // Invert B&W line-art diagrams so they show as white lines on the dark theme
+          filter: "invert(1)",
           transition: "filter 0.3s",
         }}
       />
@@ -396,6 +396,7 @@ export default function QuestionRenderer({
                         border: "1px solid rgba(255,255,255,0.08)",
                         background: "#1e293b",
                         padding: 4,
+                        filter: "invert(1)",
                       }}
                     />
                   )}
