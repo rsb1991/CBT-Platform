@@ -1549,7 +1549,11 @@ function AdminScreen({ onSignOut }) {
 
     const win = existingWin || window.open("", "_blank");
     if (!win) { alert("Please allow popups for this site to view PDF reports."); return; }
-    win.document.write("<!DOCTYPE html><html><head><title>" + student.name + " - Report</title><style>" +
+    win.document.write("<!DOCTYPE html><html><head><title>" + student.name + " - Report</title>" +
+      "<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'>" +
+      "<script src='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'><\/script>" +
+      "<script src='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js'><\/script>" +
+      "<style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
       "h2{color:#312e81;margin-top:28px}" +
@@ -1586,6 +1590,7 @@ function AdminScreen({ onSignOut }) {
       "<h2>All Questions with Solutions</h2>" +
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green = correct &nbsp;|&nbsp; Red = wrong &nbsp;|&nbsp; Gray = unattempted</p>" +
       qRows +
+      "<script>function __renderMath(){ if(window.renderMathInElement){ renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false,strict:false}); } else { setTimeout(__renderMath,150); } } window.addEventListener('load',__renderMath); __renderMath();<\/script>" +
       "</body></html>");
     win.document.close();
   };
@@ -4914,7 +4919,11 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
     }).join("");
 
     const pdfTitle = meta?.testName || "Mock Test Report";
-    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title><style>" +
+    win.document.write("<!DOCTYPE html><html><head><title>" + pdfTitle + " - Result</title>" +
+      "<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'>" +
+      "<script src='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'><\/script>" +
+      "<script src='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js'><\/script>" +
+      "<style>" +
       "body{font-family:Arial,sans-serif;padding:24px;color:#111;max-width:900px;margin:0 auto}" +
       "h1{color:#1e1b4b;border-bottom:3px solid #6366f1;padding-bottom:8px}" +
       "h2{color:#312e81;margin-top:28px}" +
@@ -4943,6 +4952,7 @@ function ResultScreen({ questions, answers, user, meta, onDashboard, onSignOut, 
       "<h2>All Questions with Solutions</h2>" +
       "<p style='font-size:12px;color:#6b7280;margin-bottom:16px'>Green border = correct &nbsp;|&nbsp; Red border = wrong &nbsp;|&nbsp; Gray border = unattempted</p>" +
       qRows +
+      "<script>function __renderMath(){ if(window.renderMathInElement){ renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false,strict:false}); } else { setTimeout(__renderMath,150); } } window.addEventListener('load',__renderMath); __renderMath();<\/script>" +
       "</body></html>");
     win.document.close();
   };
