@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // 
 // CONSTANTS
 // 
-const SUBJECTS = ["Physics", "Chemistry", "Botany", "Zoology"];
+const SUBJECTS = ["Physics", "Chemistry", "Biology"];
 // Derive the actual subject list from loaded questions, preserving NEET order when present
 function subjectsFrom(qs) {
   const present = [];
@@ -179,7 +179,7 @@ async function sbFetchQuestions(paperId = "PAPER_01") {
       solution_diagram_data: "",  // loaded on-demand
     }));
 
-    // Enforce NEET subject order (Physics, Chemistry, Botany, Zoology), then question number.
+    // Enforce NEET subject order (Physics, Chemistry, Biology), then question number.
     // DB .order("subject") is alphabetical, so we re-sort here using the defined SUBJECTS order.
     const subjectRank = (sub) => {
       const i = SUBJECTS.indexOf(sub);
@@ -429,7 +429,7 @@ const ainput = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1
 const alabel = { color: "#94a3b8", fontSize: 11, display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 };
 const acard  = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 };
 const aempty = () => ({ number: "", subject: "Physics", question_text: "", equation: "", diagram_data: "", option_a: "", option_b: "", option_c: "", option_d: "", option_a_image: "", option_b_image: "", option_c_image: "", option_d_image: "", correct: "0", solution_text: "", solution_eq: "", solution_diagram_data: "", paper_id: "PAPER_01", chapter: "", difficulty: "medium" });
-const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Botany: "#22c55e", Zoology: "#f43f5e" };
+const SUBJ_COLORS_A = { Physics: "#6366f1", Chemistry: "#f59e0b", Biology: "#22c55e" };
 
 // Helper mini-components for admin
 function DeleteResultPanel({ supabase, onDone, abtn, ainput }) {
@@ -786,7 +786,7 @@ function AdminScreen({ onSignOut }) {
 
   // Download all reports as CSV
   const downloadReportsCSV = (rows) => {
-    const header = "S.No,Name,Email,Paper ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Botany Time(s),Zoology Time(s)";
+    const header = "S.No,Name,Email,Paper ID,Date,Score,Percentage,Correct,Wrong,Unattempted,Percentile,Physics Time(s),Chemistry Time(s),Biology Time(s)";
     const lines = rows.map((r, i) => {
       const d    = new Date(r.created_at).toLocaleDateString("en-IN");
       const pct  = Math.round((r.score / maxMarksOf(r)) * 100);
@@ -795,7 +795,7 @@ function AdminScreen({ onSignOut }) {
         i+1, r.user_id.slice(0,12), d, r.score, pct+"%",
         r.correct, r.wrong, r.unattempted,
         r.percentile != null ? r.percentile+"%" : "N/A",
-        st.Physics || 0, st.Chemistry || 0, st.Botany || 0, st.Zoology || 0
+        st.Physics || 0, st.Chemistry || 0, st.Biology || 0
       ].join(",");
     });
     const csv  = header + "\n" + lines.join("\n");
@@ -1910,7 +1910,7 @@ function AdminScreen({ onSignOut }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
                   ["number", "1 to 180 (integer)"],
-                  ["subject", "Physics / Chemistry / Botany / Zoology"],
+                  ["subject", "Physics / Chemistry / Biology"],
                   ["question_text", "Main question sentence"],
                   ["equation", "LaTeX e.g. $E=mc^2$ (leave blank if none)"],
                   ["option_a to d", "Text for each option"],
@@ -2046,7 +2046,7 @@ function AdminScreen({ onSignOut }) {
             <div style={{ ...acard, padding:"18px 20px" }}>
               <div style={{ color:"#a5b4fc", fontWeight:700, marginBottom:8, fontSize:"0.95rem" }}>AI Question Paper Scanner</div>
               <p style={{ color:"#94a3b8", fontSize:13, lineHeight:1.75, margin:"0 0 12px" }}>
-                Upload photos or scans of your question paper. Claude will automatically extract all questions, options, correct answers and solutions.
+                Upload photos or scans of your question paper. AI will automatically extract all questions, options, correct answers and solutions.
                 Supports JPG, PNG, WebP images and PDFs.
               </p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
@@ -2104,10 +2104,10 @@ function AdminScreen({ onSignOut }) {
               disabled={scanLoading || scanImages.length===0}
               onClick={async () => {
                 if (!scanImages.length) { setScanMsg({ type:"error", text:"Upload at least one image first." }); return; }
-                setScanLoading(true); setScanPreview([]); setScanProgress("Sending to Claude AI...");
-                setScanMsg({ type:"info", text:"Extracting questions using AI... this may take 20-40 seconds." });
+                setScanLoading(true); setScanPreview([]); setScanProgress("Extracting, please wait!!");
+                setScanMsg({ type:"info", text:"Extracting, please wait!!" });
 
-                const subjectHint = form.subject ? "All questions are from the subject: " + form.subject + "." : "Auto-detect the subject (Physics/Chemistry/Botany/Zoology) for each question.";
+                const subjectHint = form.subject ? "All questions are from the subject: " + form.subject + "." : "Auto-detect the subject (Physics/Chemistry/Biology) for each question.";
                 const pid = paperFilter || "PAPER_01";
 
                 // Build content array with all images
@@ -2971,7 +2971,7 @@ Rules:
                         const time     = new Date(r.created_at).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
                         const isOpen   = reportExpanded === r.id;
                         const st       = r.subject_times || {};
-                        const subjList = ["Physics","Chemistry","Botany","Zoology"];
+                        const subjList = ["Physics","Chemistry","Biology"];
 
                         return (
                           <div key={r.id || i}>
@@ -3135,7 +3135,7 @@ Rules:
                             <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{r.test_name||"Test "+(i+1)}</div>
                             <div style={{ color:"#475569", fontSize:11 }}>{d} | {r.paper_id}</div>
                             <div style={{ display:"flex", gap:8, fontSize:10, color:"#64748b", marginTop:2 }}>
-                              {["Physics","Chemistry","Botany","Zoology"].map(s=><span key={s}>{s.slice(0,3)}: {Math.floor((st[s]||0)/60)}m</span>)}
+                              {["Physics","Chemistry","Biology"].map(s=><span key={s}>{s.slice(0,3)}: {Math.floor((st[s]||0)/60)}m</span>)}
                             </div>
                           </div>
                           <div style={{ textAlign:"right", flexShrink:0 }}>
@@ -3417,7 +3417,7 @@ Rules:
                                         <div style={{ flex:1 }}>
                                           <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{r.test_name || "Mock Test"}</div>
                                           <div style={{ color:"#475569", fontSize:11, marginTop:2 }}>{new Date(r.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}{r.percentile != null && <span style={{ color:"#818cf8", marginLeft:8 }}>{r.percentile}th %ile</span>}</div>
-                                          <div style={{ display:"flex", gap:10, fontSize:11, color:"#64748b", marginTop:3 }}>{["Physics","Chemistry","Botany","Zoology"].map(sub => <span key={sub}>{sub.slice(0,3)}: {Math.floor((st[sub]||0)/60)}m</span>)}</div>
+                                          <div style={{ display:"flex", gap:10, fontSize:11, color:"#64748b", marginTop:3 }}>{["Physics","Chemistry","Biology"].map(sub => <span key={sub}>{sub.slice(0,3)}: {Math.floor((st[sub]||0)/60)}m</span>)}</div>
                                         </div>
                                         <div style={{ textAlign:"right", flexShrink:0 }}>
                                           <div style={{ fontWeight:700, color:rCol, fontSize:"1.1rem" }}>{r.score}<span style={{ color:"#374151", fontSize:10, fontWeight:400 }}>/{analyticsData.totalMarks}</span></div>
@@ -4236,7 +4236,7 @@ function InstructionsScreen({ onBegin, onBack, branding = {} }) {
 // 
 // PALETTE
 // 
-const SUBJ_PAL_COLOR = { Physics:"#6366f1", Chemistry:"#f59e0b", Botany:"#22c55e", Zoology:"#f43f5e" };
+const SUBJ_PAL_COLOR = { Physics:"#6366f1", Chemistry:"#f59e0b", Biology:"#22c55e" };
 
 function Palette({ questions, answers, currentIdx, onJump, marked, visited }) {
   const vis = visited || new Set([currentIdx]);
@@ -4380,7 +4380,7 @@ function ExamScreen({ questions, onFinish, settings, examWindowEnd, examWindowSt
   const [webcamSnaps,   setWebcamSnaps]  = useState([]);
   // Time tracking per question
   const timePerQ    = useRef(saved?.timePerQ    || {});
-  const subjectTimes= useRef(saved?.subjectTimes|| { Physics:0, Chemistry:0, Botany:0, Zoology:0 });
+  const subjectTimes= useRef(saved?.subjectTimes|| { Physics:0, Chemistry:0, Biology:0 });
   const qStartTime  = useRef(Date.now());
   const timerRef    = useRef(null);
   const webcamRef   = useRef(null);
