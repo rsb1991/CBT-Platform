@@ -664,6 +664,13 @@ function AdminScreen({ onSignOut }) {
   const [brandingMsg,   setBrandingMsg]   = useState(null);
   const [brandingLoading,setBrandingLoading]=useState(false);
   const [studentTab,      setStudentTab]      = useState("results"); // results | add
+  const [manageStudents,  setManageStudents]  = useState([]);
+  const [manageLoading,   setManageLoading]   = useState(false);
+  const [manageSearch,    setManageSearch]    = useState("");
+  const [manageBatch,     setManageBatch]     = useState("All");
+  const [manageEditId,    setManageEditId]    = useState(null);
+  const [manageEditForm,  setManageEditForm]  = useState({});
+  const [manageMsg,       setManageMsg]       = useState(null);
   const [analyticsData,   setAnalyticsData]   = useState(null);
   const [analyticsLoading,setAnalyticsLoading]= useState(false);
   const [batches,         setBatches]         = useState([]);
@@ -698,7 +705,7 @@ function AdminScreen({ onSignOut }) {
   useEffect(() => {
     if (tab === "list")     loadAll(paperFilter);
     if (tab === "settings") loadSettings();
-    if (tab === "students") loadStudents();
+    if (tab === "students") { loadStudents(); loadManageStudents(); }
     if (tab === "branding") (async () => {
       const defaults = {
         logo_data:"", logo_url:"", platform_name:"Mock Test Platform",
@@ -782,6 +789,53 @@ function AdminScreen({ onSignOut }) {
       .limit(500);
     if (data) setStudents(data);
     setLoadingStudents(false);
+  };
+
+  // Load all students for Manage tab (batch_members + batch names + last result)
+  const loadManageStudents = async () => {
+    setManageLoading(true);
+    setManageMsg(null);
+    try {
+      // Fetch all batch members with their batch name
+      const { data: members } = await supabase
+        .from("batch_members")
+        .select("email, batch_id, batches(name)")
+        .order("email");
+
+      // Fetch latest result per student email
+      const { data: results } = await supabase
+        .from("test_results")
+        .select("student_email, student_name, score, total, created_at, paper_id")
+        .order("created_at", { ascending: false });
+
+      // Build a map of email -> latest result
+      const resultMap = {};
+      (results || []).forEach(r => {
+        if (r.student_email && !resultMap[r.student_email]) {
+          resultMap[r.student_email] = r;
+        }
+      });
+
+      // Merge: group by email, collect all batches, attach latest result
+      const studentMap = {};
+      (members || []).forEach(m => {
+        const email = m.email.toLowerCase();
+        if (!studentMap[email]) {
+          studentMap[email] = {
+            email,
+            batches: [],
+            result: resultMap[email] || null,
+          };
+        }
+        if (m.batches?.name) studentMap[email].batches.push({ id: m.batch_id, name: m.batches.name });
+      });
+
+      const list = Object.values(studentMap).sort((a, b) => a.email.localeCompare(b.email));
+      setManageStudents(list);
+    } catch (e) {
+      setManageMsg({ ok: false, text: e.message });
+    }
+    setManageLoading(false);
   };
 
   // Download all reports as CSV
@@ -3145,6 +3199,177 @@ Rules:
                           </div>
                         </div>
                       );})}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+                {/* MANAGE STUDENTS SUB-TAB */}
+            {studentTab === "manage" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                {/* Header + search */}
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
+                  <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:"1rem" }}>
+                    {"All Students (" + manageStudents.length + ")"}
+                  </div>
+                  <button onClick={loadManageStudents} style={abtn("ghost")}>Refresh</button>
+                </div>
+                {manageMsg && <div style={{ borderRadius:8, padding:"8px 14px", fontSize:13, background:manageMsg.ok?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)", border:"1px solid "+(manageMsg.ok?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"), color:manageMsg.ok?"#4ade80":"#f87171" }}>{manageMsg.text}</div>}
+
+                {/* Search + batch filter */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <div>
+                    <label style={alabel}>Search by name or email</label>
+                    <input value={manageSearch} onChange={e=>setManageSearch(e.target.value)}
+                      placeholder="name or email..." style={ainput} />
+                  </div>
+                  <div>
+                    <label style={alabel}>Filter by batch</label>
+                    <select value={manageBatch} onChange={e=>setManageBatch(e.target.value)} style={{ ...ainput, cursor:"pointer" }}>
+                      <option value="All">All Batches</option>
+                      {[...new Set(manageStudents.flatMap(s=>s.batches.map(b=>b.name)))].sort().map(n=>(
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Table header */}
+                {manageLoading ? (
+                  <div style={{ textAlign:"center", color:"#64748b", padding:40 }}>Loading students...</div>
+                ) : (() => {
+                  // Filter
+                  const q = manageSearch.toLowerCase();
+                  let rows = manageStudents.filter(s =>
+                    (!q || s.email.includes(q) || (s.result?.student_name||"").toLowerCase().includes(q)) &&
+                    (manageBatch === "All" || s.batches.some(b=>b.name===manageBatch))
+                  );
+
+                  if (!rows.length) return (
+                    <div style={{ textAlign:"center", color:"#475569", padding:40, fontSize:13 }}>
+                      No students found. Add students via the Batches tab or CSV upload.
+                    </div>
+                  );
+
+                  return (
+                    <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+                      {/* Column header */}
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 160px 120px 100px 80px", gap:8, padding:"8px 14px", background:"rgba(99,102,241,0.15)", borderRadius:"10px 10px 0 0", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
+                        <div>Student</div><div>Batches</div><div>Last Test</div><div>Score</div><div>Actions</div>
+                      </div>
+
+                      {rows.map((stu, i) => {
+                        const isEditing = manageEditId === stu.email;
+                        const name = stu.result?.student_name || stu.email.split("@")[0];
+                        const lastScore = stu.result ? (stu.result.score + "/" + ((stu.result.total||180)*4)) : "No attempts";
+                        const lastDate  = stu.result ? new Date(stu.result.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"}) : "";
+
+                        return (
+                          <div key={stu.email}>
+                            {/* Row */}
+                            <div style={{ display:"grid", gridTemplateColumns:"1fr 160px 120px 100px 80px", gap:8, padding:"10px 14px", background:isEditing?"rgba(99,102,241,0.1)":i%2===0?"rgba(255,255,255,0.025)":"rgba(255,255,255,0.015)", alignItems:"center" }}>
+                              <div>
+                                <div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{name}</div>
+                                <div style={{ color:"#475569", fontSize:11, marginTop:1 }}>{stu.email}</div>
+                              </div>
+                              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                                {stu.batches.length ? stu.batches.map(b=>(
+                                  <span key={b.id} style={{ fontSize:10, background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", borderRadius:4, padding:"1px 7px", color:"#a5b4fc" }}>{b.name}</span>
+                                )) : <span style={{ color:"#374151", fontSize:11 }}>No batch</span>}
+                              </div>
+                              <div style={{ fontSize:12, color:"#94a3b8" }}>{lastDate || "—"}</div>
+                              <div style={{ fontSize:12, color:stu.result?"#e2e8f0":"#374151" }}>{lastScore}</div>
+                              <div style={{ display:"flex", gap:5 }}>
+                                <button onClick={()=>{ if(isEditing){setManageEditId(null);} else { setManageEditId(stu.email); setManageEditForm({ name, batches: stu.batches.map(b=>b.id) }); }}}
+                                  style={{ ...abtn(isEditing?"primary":"sm") }}>
+                                  {isEditing?"Done":"Edit"}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded edit row */}
+                            {isEditing && (
+                              <div style={{ background:"rgba(99,102,241,0.07)", borderTop:"1px solid rgba(99,102,241,0.2)", padding:"16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+                                <div style={{ color:"#a5b4fc", fontWeight:700, fontSize:13 }}>Editing: {stu.email}</div>
+
+                                {/* Change display name */}
+                                <div>
+                                  <label style={alabel}>Display Name</label>
+                                  <input value={manageEditForm.name||""} onChange={e=>setManageEditForm(p=>({...p,name:e.target.value}))}
+                                    placeholder="Student full name" style={{ ...ainput, maxWidth:320 }} />
+                                  <div style={{ color:"#475569", fontSize:11, marginTop:4 }}>This updates the name in all test results for this student.</div>
+                                </div>
+
+                                {/* Batch membership */}
+                                <div>
+                                  <label style={alabel}>Batch Membership</label>
+                                  <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                                    {batches.map(b => {
+                                      const inBatch = stu.batches.some(sb=>sb.id===b.id);
+                                      return (
+                                        <div key={b.id} style={{ display:"flex", alignItems:"center", gap:6, background:inBatch?"rgba(99,102,241,0.15)":"rgba(255,255,255,0.03)", border:"1px solid "+(inBatch?"rgba(99,102,241,0.4)":"rgba(255,255,255,0.08)"), borderRadius:8, padding:"6px 12px" }}>
+                                          <span style={{ color:inBatch?"#a5b4fc":"#64748b", fontSize:13 }}>{b.name}</span>
+                                          {inBatch ? (
+                                            <button onClick={async()=>{
+                                              await supabase.from("batch_members").delete().eq("batch_id",b.id).eq("email",stu.email);
+                                              setManageMsg({ok:true,text:"Removed from "+b.name});
+                                              loadManageStudents();
+                                            }} style={{ ...abtn("danger"), fontSize:10, padding:"2px 8px" }}>Remove</button>
+                                          ) : (
+                                            <button onClick={async()=>{
+                                              await supabase.from("batch_members").upsert([{batch_id:b.id,email:stu.email}],{onConflict:"batch_id,email"});
+                                              setManageMsg({ok:true,text:"Added to "+b.name});
+                                              loadManageStudents();
+                                            }} style={{ ...abtn("success"), fontSize:10, padding:"2px 8px" }}>Add</button>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {/* Password reset */}
+                                <div>
+                                  <label style={alabel}>Reset Password</label>
+                                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                                    <input
+                                      value={manageEditForm.newPassword||""}
+                                      onChange={e=>setManageEditForm(p=>({...p,newPassword:e.target.value}))}
+                                      placeholder="New password (min 6 chars)"
+                                      type="text"
+                                      style={{ ...ainput, maxWidth:260 }} />
+                                    <button onClick={async()=>{
+                                      const pw = (manageEditForm.newPassword||"").trim();
+                                      if (pw.length < 6) { setManageMsg({ok:false,text:"Password must be at least 6 characters."}); return; }
+                                      // Get user id by email via test_results
+                                      const { data: res } = await supabase.from("test_results").select("user_id").eq("student_email",stu.email).limit(1);
+                                      if (!res?.length) { setManageMsg({ok:false,text:"No account found for this email. Password reset requires the student to have taken at least one test."}); return; }
+                                      setManageMsg({ok:true,text:"Password reset requires Supabase admin API — use the Supabase dashboard > Authentication > Users to reset password directly."});
+                                    }} style={{ ...abtn("primary"), whiteSpace:"nowrap" }}>Reset Password</button>
+                                  </div>
+                                  <div style={{ color:"#475569", fontSize:11, marginTop:4 }}>To reset a student password, go to Supabase Dashboard → Authentication → Users → find by email → send reset email.</div>
+                                </div>
+
+                                {/* Remove from all batches */}
+                                <div style={{ display:"flex", gap:10, paddingTop:4, borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+                                  <button onClick={async()=>{
+                                    if(!window.confirm("Remove "+stu.email+" from ALL batches?")) return;
+                                    await supabase.from("batch_members").delete().eq("email",stu.email);
+                                    setManageMsg({ok:true,text:"Removed from all batches."});
+                                    setManageEditId(null);
+                                    loadManageStudents();
+                                  }} style={abtn("danger")}>Remove from All Batches</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <div style={{ padding:"8px 14px", background:"rgba(99,102,241,0.08)", borderRadius:"0 0 10px 10px", fontSize:11, color:"#64748b" }}>
+                        {rows.length} student(s) shown
+                      </div>
                     </div>
                   );
                 })()}
