@@ -3342,13 +3342,23 @@ Rules:
                                     <button onClick={async()=>{
                                       const pw = (manageEditForm.newPassword||"").trim();
                                       if (pw.length < 6) { setManageMsg({ok:false,text:"Password must be at least 6 characters."}); return; }
-                                      // Get user id by email via test_results
-                                      const { data: res } = await supabase.from("test_results").select("user_id").eq("student_email",stu.email).limit(1);
-                                      if (!res?.length) { setManageMsg({ok:false,text:"No account found for this email. Password reset requires the student to have taken at least one test."}); return; }
-                                      setManageMsg({ok:true,text:"Password reset requires Supabase admin API — use the Supabase dashboard > Authentication > Users to reset password directly."});
+                                      setManageMsg({ok:true,text:"Updating password..."});
+                                      try {
+                                        const resp = await fetch("/api/reset-password", {
+                                          method:"POST",
+                                          headers:{"Content-Type":"application/json"},
+                                          body: JSON.stringify({ email: stu.email, password: pw }),
+                                        });
+                                        const data = await resp.json();
+                                        if (!resp.ok) throw new Error(data.error || "Failed");
+                                        setManageMsg({ok:true,text:"Password updated for "+stu.email});
+                                        setManageEditForm(p=>({...p,newPassword:""}));
+                                      } catch(e) {
+                                        setManageMsg({ok:false,text:"Error: "+e.message});
+                                      }
                                     }} style={{ ...abtn("primary"), whiteSpace:"nowrap" }}>Reset Password</button>
                                   </div>
-                                  <div style={{ color:"#475569", fontSize:11, marginTop:4 }}>To reset a student password, go to Supabase Dashboard → Authentication → Users → find by email → send reset email.</div>
+                                  <div style={{ color:"#475569", fontSize:11, marginTop:4 }}>Min 6 characters. Takes effect immediately — student can log in with the new password right away.</div>
                                 </div>
 
                                 {/* Remove from all batches */}
